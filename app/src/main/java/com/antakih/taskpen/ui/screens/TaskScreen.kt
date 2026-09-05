@@ -37,8 +37,7 @@ fun TaskScreen(viewModel: TaskViewModel) {
         floatingActionButton = {
             FloatingActionButton(onClick = {
                 // Inyección temporal de texto simulando el S-Pen
-                val mockText = """
-                    Robótica
+                val mockText = """                    
                     * Terminar reporte de simulación
                     * comprar pan mañana a las 8 pm
                 """.trimIndent()
