@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import com.antakih.taskpen.ui.screens.DrawingScreen
 import com.antakih.taskpen.ui.screens.TaskScreen
 import com.antakih.taskpen.ui.theme.TaskpenTheme
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
@@ -20,7 +21,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             TaskpenTheme {
-                TaskScreen(viewModel = viewModel)
+               // TaskScreen(viewModel = viewModel)
+                DrawingScreen()
             }
         }
     }
