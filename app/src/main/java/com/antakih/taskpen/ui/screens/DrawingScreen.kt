@@ -18,6 +18,8 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.antakih.taskpen.ui.viewmodel.TaskViewModel
+import com.google.mlkit.vision.digitalink.Ink
 
 // Estructura para guardar un punto individual con su posición y el grosor derivado de la presión
 data class PathPoint(
@@ -32,10 +34,13 @@ data class StrokeState(
 )
 
 @Composable
-fun DrawingScreen() {
-    // Memoria de trazos
+fun DrawingScreen(viewModel: TaskViewModel) {
+    // Memoria de trazos para renderizar en pantalla
     var strokes by remember { mutableStateOf(emptyList<StrokeState>()) }
     var currentStrokeState by remember { mutableStateOf<StrokeState?>(null) }
+
+    // ML KIT: Objeto Ink.Builder donde se acumulan las coordenadas físicas y timestamps para el modelo de IA
+    var inkBuilder by remember { mutableStateOf(Ink.builder()) }
 
     // Controles de estado
     var isEraserMode by remember { mutableStateOf(false) }
@@ -71,15 +76,21 @@ fun DrawingScreen() {
                 Text(if (palmRejectionEnabled) "Palma: ON" else "Palma: OFF")
             }
 
-            Button(onClick = { strokes = emptyList() }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) {
-                Text("Limpiar")
-            }
+            Button(
+                onClick = {
+                    strokes = emptyList()
+                    // ML KIT: Vacía también los trazos guardados para la IA
+                    inkBuilder = Ink.builder()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+            ) { Text("Limpiar") }
         }
 
         // Lienzo (Canvas)
         Canvas(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .background(Color.White)
                 .graphicsLayer(alpha = 0.99f)
                 .pointerInput(palmRejectionEnabled, isEraserMode) {
@@ -97,7 +108,16 @@ fun DrawingScreen() {
                         val isHardwareEraser = isStylusButtonPressed(event, down.type)
                         val isActuallyErasing = isEraserMode || isHardwareEraser
 
-                        // Calculamos el grosor según la presión recibida (down.pressure varía de 0.0 a 1.0)
+                        // ML KIT: Si estamos escribiendo (no borrando), iniciamos un nuevo trazo para la IA
+                        var strokeBuilder: Ink.Stroke.Builder? = null
+                        if (!isActuallyErasing) {
+                            strokeBuilder = Ink.Stroke.builder()
+                            strokeBuilder.addPoint(
+                                Ink.Point.create(down.position.x, down.position.y, System.currentTimeMillis())
+                            )
+                        }
+
+                        // Calculamos el grosor según la presión recibida
                         var lastWidth = if (isActuallyErasing) {
                             eraserWidth
                         } else {
@@ -117,13 +137,21 @@ fun DrawingScreen() {
                                 } else {
                                     (2f + basePenWidth * drag.pressure).coerceAtLeast(2f)
                                 }
-                                // Filtro de suavizado (70% anterior + 30% nuevo) para evitar saltos o mordidas
+                                // Filtro de suavizado
                                 val smoothedWidth = lastWidth * 0.7f + rawWidth * 0.3f
                                 lastWidth = smoothedWidth
 
                                 val newPoint = PathPoint(drag.position, smoothedWidth)
                                 currentStroke = currentStroke.copy(points = currentStroke.points + newPoint)
                                 currentStrokeState = currentStroke
+
+                                // ML KIT: Registramos las coordenadas y timestamp de movimiento
+                                if (!isActuallyErasing) {
+                                    strokeBuilder?.addPoint(
+                                        Ink.Point.create(drag.position.x, drag.position.y, System.currentTimeMillis())
+                                    )
+                                }
+
                                 drag.consume()
                             }
                         } while (dragEvent.changes.any { it.pressed })
@@ -132,6 +160,11 @@ fun DrawingScreen() {
                             strokes = strokes + it
                         }
                         currentStrokeState = null
+
+                        // ML KIT: Al levantar el S-Pen, cerramos el trazo y lo agregamos a inkBuilder
+                        if (!isActuallyErasing && strokeBuilder != null) {
+                            inkBuilder.addStroke(strokeBuilder.build())
+                        }
                     }
                 }
         ) {
@@ -144,6 +177,23 @@ fun DrawingScreen() {
             currentStrokeState?.let { stroke ->
                 drawVariableStroke(stroke)
             }
+        }
+
+        // Botón para procesar el texto con ML Kit
+        Button(
+            onClick = {
+                val inkToProcess = inkBuilder.build()
+                viewModel.processInk(inkToProcess) {
+                    // Al finalizar la conversión y guardado en DB, limpiamos el lienzo
+                    strokes = emptyList()
+                    inkBuilder = Ink.builder()
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text("Transformar a Tareas")
         }
     }
 }
@@ -169,7 +219,6 @@ private fun DrawScope.drawVariableStroke(stroke: StrokeState) {
             val p2 = stroke.points[i + 1]
             val avgWidth = (p1.width + p2.width) / 2f
 
-            // Rellena la unión entre puntos con un círculo para evitar que las uniones o puntas queden mordidas
             drawCircle(
                 color = color,
                 radius = p1.width / 2f,
@@ -187,7 +236,6 @@ private fun DrawScope.drawVariableStroke(stroke: StrokeState) {
             )
         }
 
-        // Tapa redonda final del último punto del trazo
         val lastPoint = stroke.points.last()
         drawCircle(
             color = color,
