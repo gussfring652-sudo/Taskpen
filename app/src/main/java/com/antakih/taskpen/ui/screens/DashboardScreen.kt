@@ -1,5 +1,7 @@
 package com.antakih.taskpen.ui.screens
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -205,6 +207,13 @@ fun DashboardScreen(viewModel: TaskViewModel) {
                     )
                     Spacer(Modifier.width(8.dp))
                     FloatingActionButton(
+                        onClick = { showManualTaskSheet = true },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Manual")
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    FloatingActionButton(
                         onClick = { showDrawingSheet = true },
                         containerColor = MaterialTheme.colorScheme.primary
                     ) {
@@ -291,6 +300,18 @@ fun DashboardScreen(viewModel: TaskViewModel) {
         ModalBottomSheet(onDismissRequest = { showDrawingSheet = false }, modifier = Modifier.fillMaxHeight(0.6f)) {
             DrawingScreen(viewModel = viewModel, onFinished = { showDrawingSheet = false })
         }
+    }
+    
+    if (showManualTaskSheet) {
+        ManualTaskSheet(
+            allCategories = allCategories,
+            allTags = allTags,
+            initialCategoryId = (activeContext as? ViewContext.Category)?.categoryId,
+            onDismiss = { showManualTaskSheet = false },
+            onSave = { task -> 
+                viewModel.saveTasks(listOf(task)) 
+            }
+        )
     }
 }
 
@@ -522,3 +543,80 @@ fun FilterDialog(
     }
 }
 
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ManualTaskSheet(
+    allCategories: List<CategoryEntity>,
+    allTags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
+    initialCategoryId: String?,
+    onDismiss: () -> Unit,
+    onSave: (TaskEntity) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var isImportant by remember { mutableStateOf(false) }
+    var selectedCategoryId by remember { mutableStateOf(initialCategoryId) }
+    var selectedTagId by remember { mutableStateOf<String?>(null) }
+    
+    // For date picking (simplified for now as strings or just leave empty)
+    // In a real app we'd use DatePicker
+    
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(16.dp).fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+            Text("Crear Tarea", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(16.dp))
+            
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Título de la Tarea") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text("Descripción (opcional)") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3
+            )
+            Spacer(Modifier.height(8.dp))
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = isImportant, onCheckedChange = { isImportant = it })
+                Text("Marcar como Importante (★)")
+            }
+            
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    if (title.isNotBlank()) {
+                        val task = TaskEntity(
+                            id = java.util.UUID.randomUUID().toString(),
+                            categoryId = selectedCategoryId,
+                            subcategoryId = selectedTagId,
+                            parentTaskId = null,
+                            title = title.trim(),
+                            description = description.trim().takeIf { it.isNotBlank() },
+                            createdAt = System.currentTimeMillis(),
+                            dueDate = null,
+                            hasSpecificTime = false,
+                            isCompleted = false,
+                            isImportant = isImportant,
+                            isDeleted = false,
+                            calendarEventId = null
+                        )
+                        onSave(task)
+                        onDismiss()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Guardar Tarea")
+            }
+            Spacer(Modifier.height(32.dp))
+        }
+    }
+}
