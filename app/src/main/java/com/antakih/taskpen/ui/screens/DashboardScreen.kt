@@ -1,5 +1,15 @@
 package com.antakih.taskpen.ui.screens
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Clear
+import java.util.Calendar
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import java.text.SimpleDateFormat
@@ -23,7 +33,6 @@ import com.antakih.taskpen.data.local.entities.CategoryEntity
 import com.antakih.taskpen.data.local.entities.TaskEntity
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
 import com.antakih.taskpen.ui.viewmodel.ViewContext
-import java.util.Calendar
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -322,8 +331,23 @@ fun DashboardScreen(viewModel: TaskViewModel) {
             allTags = allTags,
             initialCategoryId = (activeContext as? ViewContext.Category)?.categoryId,
             onDismiss = { showManualTaskSheet = false },
-            onSave = { task -> 
-                viewModel.saveTasks(listOf(task)) 
+            onSave = { task, subtasks -> 
+                val subEntities = subtasks.map { subTitle ->
+                    TaskEntity(
+                        id = java.util.UUID.randomUUID().toString(),
+                        categoryId = task.categoryId,
+                        subcategoryId = task.subcategoryId,
+                        parentTaskId = task.id,
+                        title = subTitle,
+                        createdAt = System.currentTimeMillis(),
+                        description = null,
+                        dueDate = null,
+                        hasSpecificTime = false,
+                        isCompleted = false,
+                        calendarEventId = null
+                    )
+                }
+                viewModel.saveTasks(listOf(task) + subEntities)
             }
         )
     }
@@ -565,17 +589,26 @@ fun ManualTaskSheet(
     allTags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
     initialCategoryId: String?,
     onDismiss: () -> Unit,
-    onSave: (TaskEntity) -> Unit
+    onSave: (TaskEntity, List<String>) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var isImportant by remember { mutableStateOf(false) }
-    var selectedCategoryId by remember { mutableStateOf(initialCategoryId) }
-    var selectedTagId by remember { mutableStateOf<String?>(null) }
+    var title by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+    var description by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+    var isImportant by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var selectedCategoryId by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(initialCategoryId) }
+    var selectedTagId by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     
-    // For date picking (simplified for now as strings or just leave empty)
-    // In a real app we'd use DatePicker
+    var dueDateMillis by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
+    var hasTime by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     
+    var subtasks by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(listOf<String>()) }
+    var newSubtaskTitle by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+    
+    var showDatePicker by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showTimePicker by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    
+    val dateString = dueDateMillis?.let { java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(it)) } ?: "Sin fecha"
+    val timeString = if (hasTime && dueDateMillis != null) java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(dueDateMillis!!)) else "Sin hora"
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(16.dp).fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
             Text("Crear Tarea", style = MaterialTheme.typography.titleLarge)
@@ -598,6 +631,49 @@ fun ManualTaskSheet(
             )
             Spacer(Modifier.height(8.dp))
             
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(onClick = { showDatePicker = true }) {
+                    Icon(Icons.Default.DateRange, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text(dateString)
+                }
+                TextButton(onClick = { showTimePicker = true }, enabled = dueDateMillis != null) {
+                    Icon(Icons.Default.Schedule, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text(timeString)
+                }
+            }
+            
+            Spacer(Modifier.height(8.dp))
+            
+            Text("Subtareas:", style = MaterialTheme.typography.titleMedium)
+            subtasks.forEachIndexed { index, st ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text("• $st", modifier = Modifier.weight(1f))
+                    IconButton(onClick = { subtasks = subtasks.toMutableList().apply { removeAt(index) } }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Eliminar")
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = newSubtaskTitle,
+                onValueChange = { newSubtaskTitle = it },
+                label = { Text("Añadir subtarea...") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                trailingIcon = {
+                    IconButton(onClick = {
+                        if (newSubtaskTitle.isNotBlank()) {
+                            subtasks = subtasks + newSubtaskTitle.trim()
+                            newSubtaskTitle = ""
+                        }
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = "Agregar")
+                    }
+                }
+            )
+            
+            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = isImportant, onCheckedChange = { isImportant = it })
                 Text("Marcar como Importante (★)")
@@ -615,14 +691,14 @@ fun ManualTaskSheet(
                             title = title.trim(),
                             description = description.trim().takeIf { it.isNotBlank() },
                             createdAt = System.currentTimeMillis(),
-                            dueDate = null,
-                            hasSpecificTime = false,
+                            dueDate = dueDateMillis,
+                            hasSpecificTime = hasTime,
                             isCompleted = false,
                             isImportant = isImportant,
                             isDeleted = false,
                             calendarEventId = null
                         )
-                        onSave(task)
+                        onSave(task, subtasks)
                         onDismiss()
                     }
                 },
@@ -632,6 +708,49 @@ fun ManualTaskSheet(
             }
             Spacer(Modifier.height(32.dp))
         }
+    }
+    
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dueDateMillis ?: System.currentTimeMillis())
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    dueDateMillis = datePickerState.selectedDateMillis
+                    if (dueDateMillis == null) hasTime = false
+                    showDatePicker = false
+                }) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState()
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val cal = Calendar.getInstance()
+                    if (dueDateMillis != null) {
+                        cal.timeInMillis = dueDateMillis!!
+                    }
+                    cal.set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                    cal.set(Calendar.MINUTE, timePickerState.minute)
+                    dueDateMillis = cal.timeInMillis
+                    hasTime = true
+                    showTimePicker = false
+                }) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("Cancelar") }
+            },
+            text = { TimePicker(state = timePickerState) }
+        )
     }
 }
 
