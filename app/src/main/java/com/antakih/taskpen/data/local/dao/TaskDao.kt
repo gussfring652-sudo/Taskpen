@@ -1,4 +1,4 @@
-﻿package com.antakih.taskpen.data.local.dao
+package com.antakih.taskpen.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -31,6 +31,9 @@ interface TaskDao {
 
     @Query("UPDATE tasks SET isCompleted = 1 WHERE id = :taskId")
     suspend fun markTaskAsCompleted(taskId: String)
+
+    @Query("UPDATE tasks SET isImportant = :isImportant WHERE id = :taskId")
+    suspend fun updateTaskImportance(taskId: String, isImportant: Boolean)
 
     @Query("DELETE FROM tasks WHERE id = :taskId")
     suspend fun deleteTask(taskId: String)

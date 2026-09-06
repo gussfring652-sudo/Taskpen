@@ -1,4 +1,4 @@
-﻿package com.antakih.taskpen.di
+package com.antakih.taskpen.di
 
 import android.content.Context
 import androidx.room.Room
@@ -22,11 +22,18 @@ object DatabaseModule {
     fun provideAppDatabase(
         @ApplicationContext context: Context
     ): AppDatabase {
+        val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE tasks ADD COLUMN isImportant INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         return Room.databaseBuilder(
             context,
             AppDatabase::class.java,
             "taskpen_database"
         )
+        .addMigrations(MIGRATION_3_4)
         .fallbackToDestructiveMigration(dropAllTables = true)
         .build()
     }

@@ -64,11 +64,19 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
         var isInsideDescription = false
 
         for ((line, minX) in processedLines) {
+            
+            var workingLine = line
+            var isImportant = false
+            if (workingLine.contains("*") || workingLine.contains("★")) {
+                isImportant = true
+                workingLine = workingLine.replace("*", "").replace("★", "").trim()
+                workingLine = workingLine.replace(Regex("""\s{2,}"""), " ")
+            }
 
             // ── 0. BLOQUE DE DESCRIPCIÓN ENTRE PARÉNTESIS (Ignora sangría)
             if (isInsideDescription) {
-                val hasClosing = line.contains(")")
-                val cleanLine = line.replace(")", "").trim()
+                val hasClosing = workingLine.contains(")")
+                val cleanLine = workingLine.replace(")", "").trim()
                 if (cleanLine.isNotEmpty()) {
                     val lastMainIdx = extractedTasks.indexOfLast { it.parentTaskId == null }
                     if (lastMainIdx != -1) {
@@ -81,9 +89,9 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
                 continue
             }
 
-            if (line.startsWith("(")) {
-                val hasClosing = line.indexOf(")") > 0
-                val cleanLine = line.replace("(", "").replace(")", "").trim()
+            if (workingLine.startsWith("(")) {
+                val hasClosing = workingLine.indexOf(")") > 0
+                val cleanLine = workingLine.replace("(", "").replace(")", "").trim()
                 if (cleanLine.isNotEmpty()) {
                     val lastMainIdx = extractedTasks.indexOfLast { it.parentTaskId == null }
                     if (lastMainIdx != -1) {
@@ -97,13 +105,13 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             }
 
             // ── 1. ¿Es una SUBTAREA? (empieza con - o indentada)
-            val subtaskMatch = subtaskMarkerRegex.find(line)
+            val subtaskMatch = subtaskMarkerRegex.find(workingLine)
             val isIndented = activeMainTaskX != null && (minX - activeMainTaskX > 40f)
 
             if (subtaskMatch != null || isIndented) {
                 val lastTask = extractedTasks.lastOrNull { it.parentTaskId == null }
                 if (lastTask != null) {
-                    val subtaskTitle = if (subtaskMatch != null) subtaskMatch.groupValues[1].trim() else line
+                    val subtaskTitle = if (subtaskMatch != null) subtaskMatch.groupValues[1].trim() else workingLine
                     val subtask = TaskEntity(
                         id = UUID.randomUUID().toString(),
                         title = subtaskTitle,
@@ -115,6 +123,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
                         dueDate = lastTask.dueDate,
                         hasSpecificTime = false,
                         isCompleted = false,
+                        isImportant = isImportant,
                         calendarEventId = null
                     )
                     extractedTasks.add(subtask)
@@ -125,7 +134,6 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             // ── 2. Detectar subcategoría en la línea (fuzzy match con las existentes)
             var detectedSubcategoryId: String? = null
             var detectedSubcategoryName: String? = null
-            var workingLine = line
 
             val allSubjects = existingSubcategories.toMutableList() + newSubcategoriesToCreate
             for (subject in allSubjects) {

@@ -25,6 +25,12 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 
+data class FilterState(
+    val sortByDueDate: Boolean = false,
+    val selectedTagIds: Set<String> = emptySet(),
+    val showOnlyImportant: Boolean = false
+)
+
 @HiltViewModel
 class TaskViewModel @Inject constructor(
     private val taskDao: TaskDao,
@@ -37,6 +43,13 @@ class TaskViewModel @Inject constructor(
     // Categoría actualmente seleccionada (null = vista global)
     private val _activeCategoryId = MutableStateFlow<String?>(null)
     val activeCategoryId: StateFlow<String?> = _activeCategoryId.asStateFlow()
+
+    private val _filterState = MutableStateFlow(FilterState())
+    val filterState: StateFlow<FilterState> = _filterState.asStateFlow()
+
+    fun updateFilterState(newState: FilterState) {
+        _filterState.value = newState
+    }
 
     val allCategories: StateFlow<List<CategoryEntity>> = categoryDao.getAllCategories()
         .catch { e -> Log.e("TaskPenML", "Error leyendo categorías: ${e.message}", e); emit(emptyList()) }
@@ -157,6 +170,13 @@ class TaskViewModel @Inject constructor(
         viewModelScope.launch {
             try { taskDao.markTaskAsCompleted(taskId) }
             catch (e: Throwable) { Log.e("TaskPenML", "Error al completar tarea: ${e.message}", e) }
+        }
+    }
+
+    fun toggleTaskImportance(taskId: String, isImportant: Boolean) {
+        viewModelScope.launch {
+            try { taskDao.updateTaskImportance(taskId, isImportant) }
+            catch (e: Throwable) { Log.e("TaskPenML", "Error al actualizar importancia: ${e.message}", e) }
         }
     }
 

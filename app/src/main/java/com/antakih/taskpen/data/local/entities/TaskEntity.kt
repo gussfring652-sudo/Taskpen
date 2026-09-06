@@ -1,4 +1,4 @@
-﻿package com.antakih.taskpen.data.local.entities
+package com.antakih.taskpen.data.local.entities
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
@@ -24,5 +24,6 @@ data class TaskEntity(
     val dueDate: Long?,
     val hasSpecificTime: Boolean,
     val isCompleted: Boolean,
+    @ColumnInfo(defaultValue = "0") val isImportant: Boolean = false,
     val calendarEventId: String?
 )

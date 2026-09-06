@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -84,7 +86,7 @@ fun TaskDetailScreen(
                             modifier = Modifier.padding(top = 4.dp)
                         )
                         Spacer(Modifier.width(8.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(text = task.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                             if (assignedTag != null) {
                                 Spacer(Modifier.height(8.dp))
@@ -114,6 +116,16 @@ fun TaskDetailScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
+                        }
+                        IconButton(
+                            onClick = { viewModel.toggleTaskImportance(task.id, !task.isImportant) },
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (task.isImportant) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                contentDescription = "Marcar como importante",
+                                tint = if (task.isImportant) androidx.compose.ui.graphics.Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }

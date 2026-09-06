@@ -6,7 +6,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,20 +31,35 @@ fun TaskScreen(
     onBack: () -> Unit
 ) {
     val allTasks by viewModel.pendingTasks.collectAsState()
-
     val activeTags by viewModel.activeTags.collectAsState()
+    val filterState by viewModel.filterState.collectAsState()
 
     // Filtrar tareas raíz (sin padre) por categoría seleccionada
-    val tasks = if (category == null) {
+    val categoryTasks = if (category == null) {
         allTasks.filter { it.parentTaskId == null && it.categoryId == null }
     } else {
         allTasks.filter { it.parentTaskId == null && it.categoryId == category.id }
+    }
+
+    // Aplicar filtros
+    val filteredTasks = categoryTasks.filter { task ->
+        val matchesTag = filterState.selectedTagIds.isEmpty() || filterState.selectedTagIds.contains(task.subcategoryId)
+        val matchesImportant = !filterState.showOnlyImportant || task.isImportant
+        matchesTag && matchesImportant
+    }
+
+    // Aplicar ordenamiento
+    val tasks = if (filterState.sortByDueDate) {
+        filteredTasks.sortedWith(compareBy<TaskEntity> { it.dueDate == null }.thenBy { it.dueDate })
+    } else {
+        filteredTasks.sortedByDescending { it.createdAt }
     }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showBottomSheet by remember { mutableStateOf(false) }
     var selectedTask by remember { mutableStateOf<TaskEntity?>(null) }
     var showTagsDialog by remember { mutableStateOf(false) }
+    var showFilterDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -53,6 +71,9 @@ fun TaskScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showFilterDialog = true }) {
+                        Icon(Icons.Default.FilterList, contentDescription = "Filtros y Orden")
+                    }
                     IconButton(onClick = { showTagsDialog = true }) {
                         Icon(Icons.Default.Label, contentDescription = "Administrar Etiquetas")
                     }
@@ -101,6 +122,7 @@ fun TaskScreen(
                         task = task,
                         tags = activeTags,
                         onComplete = { viewModel.completeTask(task.id) },
+                        onToggleImportant = { viewModel.toggleTaskImportance(task.id, !task.isImportant) },
                         onClick = { selectedTask = task }
                     )
                 }
@@ -120,6 +142,17 @@ fun TaskScreen(
             }
         }
 
+        if (showFilterDialog) {
+            FilterDialog(
+                tags = activeTags,
+                currentState = filterState,
+                onDismiss = { showFilterDialog = false },
+                onApply = { newState ->
+                    viewModel.updateFilterState(newState)
+                }
+            )
+        }
+
         if (showTagsDialog) {
             TagsDialog(
                 tags = activeTags,
@@ -133,7 +166,13 @@ fun TaskScreen(
 }
 
 @Composable
-fun TaskCard(task: TaskEntity, tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>, onComplete: () -> Unit, onClick: () -> Unit = {}) {
+fun TaskCard(
+    task: TaskEntity,
+    tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
+    onComplete: () -> Unit,
+    onToggleImportant: () -> Unit,
+    onClick: () -> Unit = {}
+) {
     val dateFormat = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
     val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
     val dateString = task.dueDate?.let {
@@ -177,6 +216,13 @@ fun TaskCard(task: TaskEntity, tags: List<com.antakih.taskpen.data.local.entitie
                     text = "Vence: $dateString",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onToggleImportant) {
+                Icon(
+                    imageVector = if (task.isImportant) Icons.Filled.Star else Icons.Filled.StarBorder,
+                    contentDescription = "Marcar como importante",
+                    tint = if (task.isImportant) androidx.compose.ui.graphics.Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -261,6 +307,86 @@ fun TagsDialog(
                 Spacer(modifier = Modifier.height(16.dp))
                 TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
                     Text("Cerrar")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FilterDialog(
+    tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
+    currentState: com.antakih.taskpen.ui.viewmodel.FilterState,
+    onDismiss: () -> Unit,
+    onApply: (com.antakih.taskpen.ui.viewmodel.FilterState) -> Unit
+) {
+    var sortByDueDate by remember { mutableStateOf(currentState.sortByDueDate) }
+    var selectedTagIds by remember { mutableStateOf(currentState.selectedTagIds) }
+    var showOnlyImportant by remember { mutableStateOf(currentState.showOnlyImportant) }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Filtros y Orden", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text("Ordenar por:", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = !sortByDueDate, onClick = { sortByDueDate = false })
+                    Text("Fecha de Creación")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = sortByDueDate, onClick = { sortByDueDate = true })
+                    Text("Fecha de Vencimiento")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text("Filtros:", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = showOnlyImportant, onCheckedChange = { showOnlyImportant = it })
+                    Text("Solo Importantes (★)")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Etiquetas:", style = MaterialTheme.typography.bodyMedium)
+                LazyColumn(modifier = Modifier.fillMaxHeight(0.3f)) {
+                    items(tags, key = { it.id }) { tag ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = selectedTagIds.contains(tag.id),
+                                onCheckedChange = { isChecked ->
+                                    val newSet = selectedTagIds.toMutableSet()
+                                    if (isChecked) newSet.add(tag.id) else newSet.remove(tag.id)
+                                    selectedTagIds = newSet
+                                }
+                            )
+                            Text(tag.fullName)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancelar")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        onApply(com.antakih.taskpen.ui.viewmodel.FilterState(
+                            sortByDueDate = sortByDueDate,
+                            selectedTagIds = selectedTagIds,
+                            showOnlyImportant = showOnlyImportant
+                        ))
+                        onDismiss()
+                    }) {
+                        Text("Aplicar")
+                    }
                 }
             }
         }

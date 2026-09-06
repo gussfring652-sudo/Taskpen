@@ -1,4 +1,4 @@
-﻿package com.antakih.taskpen.data.local
+package com.antakih.taskpen.data.local
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -12,7 +12,7 @@ import com.antakih.taskpen.data.local.entities.TaskEntity
 
 @Database(
     entities = [CategoryEntity::class, SubjectEntity::class, TaskEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
