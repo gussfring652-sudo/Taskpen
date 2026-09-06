@@ -54,7 +54,7 @@ fun DashboardScreen(viewModel: TaskViewModel) {
     val displayedTasks = remember(activeContext, filterState, activeTasks, deletedTasks) {
         val baseTasks = when (activeContext) {
             is ViewContext.Trash -> deletedTasks
-            is ViewContext.Inbox -> activeTasks.filter { it.categoryId == null }
+            is ViewContext.General -> activeTasks
             is ViewContext.Category -> activeTasks.filter { it.categoryId == (activeContext as ViewContext.Category).categoryId }
             is ViewContext.Completed -> activeTasks.filter { it.isCompleted }
             is ViewContext.Important -> activeTasks.filter { it.isImportant && !it.isCompleted }
@@ -102,7 +102,7 @@ fun DashboardScreen(viewModel: TaskViewModel) {
     }
 
     val title = when (activeContext) {
-        is ViewContext.Inbox -> "Bandeja de Entrada"
+        is ViewContext.General -> "General"
         is ViewContext.Today -> "Hoy"
         is ViewContext.Tomorrow -> "Mañana"
         is ViewContext.Postponed -> "Pospuestas"
@@ -121,9 +121,9 @@ fun DashboardScreen(viewModel: TaskViewModel) {
                 Divider()
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.Inbox, contentDescription = null) },
-                    label = { Text("Bandeja de Entrada") },
-                    selected = activeContext is ViewContext.Inbox,
-                    onClick = { viewModel.setContext(ViewContext.Inbox); scope.launch { drawerState.close() } }
+                    label = { Text("General") },
+                    selected = activeContext is ViewContext.General,
+                    onClick = { viewModel.setContext(ViewContext.General); scope.launch { drawerState.close() } }
                 )
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.Today, contentDescription = null) },
@@ -232,7 +232,7 @@ fun DashboardScreen(viewModel: TaskViewModel) {
                         items(recentCategories) { cat ->
                             InputChip(
                                 selected = (activeContext as? ViewContext.Category)?.categoryId == cat.id,
-                                onClick = { viewModel.setContext(ViewContext.Category(cat.id)) },
+                                onClick = { if ((activeContext as? ViewContext.Category)?.categoryId == cat.id) viewModel.setContext(ViewContext.General) else viewModel.setContext(ViewContext.Category(cat.id)) },
                                 label = { Text(cat.name) }
                             )
                         }
@@ -274,6 +274,20 @@ fun DashboardScreen(viewModel: TaskViewModel) {
     }
 
     // Modal Bottom Sheets and Dialogs instances...
+    if (showAllCategoriesSheet) {
+        AllCategoriesSheet(
+            allCategories = allCategories,
+            onDismiss = { showAllCategoriesSheet = false },
+            onCategorySelected = { id -> 
+                viewModel.setContext(ViewContext.Category(id))
+                showAllCategoriesSheet = false
+            },
+            onCreateCategory = { name, color -> 
+                viewModel.createCategory(name, color) 
+            }
+        )
+    }
+
     if (showFilterDialog) {
         FilterDialog(
             tags = allTags,
@@ -615,6 +629,64 @@ fun ManualTaskSheet(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Guardar Tarea")
+            }
+            Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AllCategoriesSheet(
+    allCategories: List<CategoryEntity>,
+    onDismiss: () -> Unit,
+    onCategorySelected: (String) -> Unit,
+    onCreateCategory: (String, String) -> Unit
+) {
+    var showCreateForm by remember { mutableStateOf(false) }
+    var newCatName by remember { mutableStateOf("") }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+            if (showCreateForm) {
+                Text("Nueva Categoría", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = newCatName,
+                    onValueChange = { newCatName = it },
+                    label = { Text("Nombre") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = { showCreateForm = false }) { Text("Cancelar") }
+                    Button(onClick = {
+                        if (newCatName.isNotBlank()) {
+                            onCreateCategory(newCatName.trim(), "#6200EE")
+                            showCreateForm = false
+                            onDismiss()
+                        }
+                    }) { Text("Crear") }
+                }
+            } else {
+                Text("Todas las categorías", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(modifier = Modifier.fillMaxHeight(0.5f)) {
+                    items(allCategories, key = { it.id }) { cat ->
+                        ListItem(
+                            headlineContent = { Text(cat.name) },
+                            modifier = Modifier.clickable { onCategorySelected(cat.id) }
+                        )
+                    }
+                    item {
+                        ListItem(
+                            headlineContent = { Text("Crear nueva categoría...", color = MaterialTheme.colorScheme.primary) },
+                            leadingContent = { Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary) },
+                            modifier = Modifier.clickable { showCreateForm = true }
+                        )
+                    }
+                }
             }
             Spacer(Modifier.height(32.dp))
         }

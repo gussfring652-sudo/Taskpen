@@ -32,7 +32,7 @@ data class FilterState(
 )
 
 sealed class ViewContext {
-    object Inbox : ViewContext()
+    object General : ViewContext()
     object Today : ViewContext()
     object Tomorrow : ViewContext()
     object Postponed : ViewContext()
@@ -51,7 +51,7 @@ class TaskViewModel @Inject constructor(
     private val digitalInkHelper: DigitalInkHelper
 ) : ViewModel() {
 
-    private val _activeContext = MutableStateFlow<ViewContext>(ViewContext.Inbox)
+    private val _activeContext = MutableStateFlow<ViewContext>(ViewContext.General)
     val activeContext: StateFlow<ViewContext> = _activeContext.asStateFlow()
 
     private val _filterState = MutableStateFlow(FilterState())
