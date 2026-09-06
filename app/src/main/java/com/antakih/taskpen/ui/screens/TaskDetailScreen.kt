@@ -1,4 +1,4 @@
-﻿package com.antakih.taskpen.ui.screens
+package com.antakih.taskpen.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,6 +27,7 @@ fun TaskDetailScreen(
     onBack: () -> Unit
 ) {
     val subtasks by viewModel.getSubtasks(task.id).collectAsState(initial = emptyList())
+    val activeTags by viewModel.activeTags.collectAsState()
     var showAddSubtask by remember { mutableStateOf(false) }
     var newSubtaskTitle by remember { mutableStateOf("") }
 
@@ -36,6 +37,8 @@ fun TaskDetailScreen(
         if (task.hasSpecificTime) "${dateFormat.format(Date(it))} • ${timeFormat.format(Date(it))}"
         else dateFormat.format(Date(it))
     } ?: "Sin fecha"
+
+    val assignedTag = activeTags.find { it.id == task.subcategoryId }
 
     Scaffold(
         topBar = {
@@ -83,15 +86,21 @@ fun TaskDetailScreen(
                         Spacer(Modifier.width(8.dp))
                         Column {
                             Text(text = task.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                            if (task.subcategoryId != null) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = task.subcategoryId,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                            if (assignedTag != null) {
+                                Spacer(Modifier.height(8.dp))
+                                androidx.compose.material3.Surface(
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    shape = MaterialTheme.shapes.small
+                                ) {
+                                    Text(
+                                        text = assignedTag.fullName,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
                             }
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(8.dp))
                             Text(
                                 text = "Vence: $dateString",
                                 style = MaterialTheme.typography.bodyMedium,

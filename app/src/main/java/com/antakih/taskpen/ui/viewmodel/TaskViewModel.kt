@@ -7,6 +7,7 @@ import com.antakih.taskpen.data.local.dao.CategoryDao
 import com.antakih.taskpen.data.local.dao.SubjectDao
 import com.antakih.taskpen.data.local.dao.TaskDao
 import com.antakih.taskpen.data.local.entities.CategoryEntity
+import com.antakih.taskpen.data.local.entities.SubjectEntity
 import com.antakih.taskpen.data.local.entities.TaskEntity
 import com.antakih.taskpen.domain.mlkit.DigitalInkHelper
 import com.antakih.taskpen.domain.usecases.ParseHandwrittenTextUseCase
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -44,6 +46,12 @@ class TaskViewModel @Inject constructor(
         .catch { e -> Log.e("TaskPenML", "Error al leer tareas: ${e.message}", e); emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val activeTags: StateFlow<List<SubjectEntity>> = _activeCategoryId.flatMapLatest { catId ->
+        if (catId == null) kotlinx.coroutines.flow.flowOf(emptyList())
+        else subjectDao.getSubjectsByCategory(catId)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     init {
         viewModelScope.launch {
             try {
@@ -68,6 +76,19 @@ class TaskViewModel @Inject constructor(
                 colorHex = colorHex
             )
             categoryDao.insertCategory(category)
+        }
+    }
+
+    fun createTag(categoryId: String, name: String, aliases: List<String>) {
+        viewModelScope.launch {
+            val tag = SubjectEntity(
+                id = UUID.randomUUID().toString(),
+                categoryId = categoryId,
+                fullName = name,
+                aliases = aliases,
+                semester = null
+            )
+            subjectDao.insertSubject(tag)
         }
     }
 

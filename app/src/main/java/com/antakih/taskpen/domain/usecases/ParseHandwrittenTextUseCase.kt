@@ -131,12 +131,14 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             for (subject in allSubjects) {
                 val namesToCheck = listOf(subject.fullName) + subject.aliases
                 val found = namesToCheck.find { alias ->
-                    workingLine.contains(alias, ignoreCase = true)
+                    Regex("""\b${Regex.escape(alias)}\b""", RegexOption.IGNORE_CASE).containsMatchIn(workingLine)
                 }
                 if (found != null) {
                     detectedSubcategoryId = subject.id
                     activeSubcategoryId = subject.id
-                    workingLine = workingLine.replace(found, "", ignoreCase = true).trim()
+                    workingLine = workingLine.replace(Regex("""\b${Regex.escape(found)}\b""", RegexOption.IGNORE_CASE), "").trim()
+                    // Si quedaron dobles espacios por quitar la palabra en medio, limpiarlos
+                    workingLine = workingLine.replace(Regex("""\s{2,}"""), " ")
                     break
                 }
             }

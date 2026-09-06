@@ -4,8 +4,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Label
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +29,8 @@ fun TaskScreen(
 ) {
     val allTasks by viewModel.pendingTasks.collectAsState()
 
+    val activeTags by viewModel.activeTags.collectAsState()
+
     // Filtrar tareas raíz (sin padre) por categoría seleccionada
     val tasks = if (category == null) {
         allTasks.filter { it.parentTaskId == null && it.categoryId == null }
@@ -38,6 +41,7 @@ fun TaskScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showBottomSheet by remember { mutableStateOf(false) }
     var selectedTask by remember { mutableStateOf<TaskEntity?>(null) }
+    var showTagsDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -45,7 +49,12 @@ fun TaskScreen(
                 title = { Text(category?.name ?: "General", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showTagsDialog = true }) {
+                        Icon(Icons.Default.Label, contentDescription = "Administrar Etiquetas")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -90,6 +99,7 @@ fun TaskScreen(
                 items(tasks, key = { it.id }) { task ->
                     TaskCard(
                         task = task,
+                        tags = activeTags,
                         onComplete = { viewModel.completeTask(task.id) },
                         onClick = { selectedTask = task }
                     )
@@ -109,17 +119,29 @@ fun TaskScreen(
                 )
             }
         }
+
+        if (showTagsDialog) {
+            TagsDialog(
+                tags = activeTags,
+                onDismiss = { showTagsDialog = false },
+                onAddTag = { name, aliases ->
+                    viewModel.createTag(category?.id ?: "", name, aliases)
+                }
+            )
+        }
     }
 }
 
 @Composable
-fun TaskCard(task: TaskEntity, onComplete: () -> Unit, onClick: () -> Unit = {}) {
+fun TaskCard(task: TaskEntity, tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>, onComplete: () -> Unit, onClick: () -> Unit = {}) {
     val dateFormat = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
     val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
     val dateString = task.dueDate?.let {
         if (task.hasSpecificTime) "${dateFormat.format(Date(it))} • ${timeFormat.format(Date(it))}"
         else dateFormat.format(Date(it))
     } ?: "Sin fecha"
+
+    val assignedTag = tags.find { it.id == task.subcategoryId }
 
     Card(
         onClick = onClick,
@@ -136,18 +158,110 @@ fun TaskCard(task: TaskEntity, onComplete: () -> Unit, onClick: () -> Unit = {})
             Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = task.title, style = MaterialTheme.typography.titleMedium)
-                if (task.subcategoryId != null) {
-                    Text(
-                        text = task.subcategoryId,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                if (assignedTag != null) {
+                    androidx.compose.material3.Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+                    ) {
+                        Text(
+                            text = assignedTag.fullName,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
                 }
+
                 Text(
                     text = "Vence: $dateString",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun TagsDialog(
+    tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
+    onDismiss: () -> Unit,
+    onAddTag: (name: String, aliases: List<String>) -> Unit
+) {
+    var newTagName by remember { mutableStateOf("") }
+    var newTagAliases by remember { mutableStateOf("") }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Administrar Etiquetas", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                OutlinedTextField(
+                    value = newTagName,
+                    onValueChange = { newTagName = it },
+                    label = { Text("Nombre de Etiqueta (Ej: Robótica)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = newTagAliases,
+                    onValueChange = { newTagAliases = it },
+                    label = { Text("Alias separados por coma (Ej: rb, robot)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        if (newTagName.isNotBlank()) {
+                            val aliasesList = newTagAliases.split(",")
+                                .map { it.trim().lowercase() }
+                                .filter { it.isNotEmpty() }
+                            onAddTag(newTagName.trim(), aliasesList)
+                            newTagName = ""
+                            newTagAliases = ""
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Añadir Etiqueta")
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Etiquetas actuales:", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                LazyColumn(modifier = Modifier.fillMaxHeight(0.4f)) {
+                    items(tags, key = { it.id }) { tag ->
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = MaterialTheme.shapes.small
+                            ) {
+                                Text(
+                                    text = tag.fullName,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Alias: " + tag.aliases.joinToString(", "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                    Text("Cerrar")
+                }
             }
         }
     }
