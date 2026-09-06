@@ -29,7 +29,7 @@ fun TaskDetailScreen(
     onBack: () -> Unit
 ) {
     val subtasks by viewModel.getSubtasks(task.id).collectAsState(initial = emptyList())
-    val activeTags by viewModel.activeTags.collectAsState()
+    val allTags by viewModel.allTags.collectAsState()
     var showAddSubtask by remember { mutableStateOf(false) }
     var newSubtaskTitle by remember { mutableStateOf("") }
 
@@ -40,7 +40,7 @@ fun TaskDetailScreen(
         else dateFormat.format(Date(it))
     } ?: "Sin fecha"
 
-    val assignedTag = activeTags.find { it.id == task.subcategoryId }
+    val assignedTag = task.subcategoryId?.let { id -> allTags.find { it.id == id } }
 
     Scaffold(
         topBar = {

@@ -1,4 +1,4 @@
-﻿package com.antakih.taskpen.data.local.dao
+package com.antakih.taskpen.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -24,6 +24,9 @@ interface SubjectDao {
 
     @Query("SELECT * FROM subjects ORDER BY fullName ASC")
     suspend fun getAllSubjectsOnce(): List<SubjectEntity>
+
+    @Query("SELECT * FROM subjects ORDER BY fullName ASC")
+    fun getAllSubjectsOnceFlow(): Flow<List<SubjectEntity>>
 
     @Query("DELETE FROM subjects WHERE id = :id")
     suspend fun deleteSubject(id: String)

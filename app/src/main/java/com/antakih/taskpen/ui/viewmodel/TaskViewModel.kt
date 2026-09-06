@@ -31,6 +31,17 @@ data class FilterState(
     val showOnlyImportant: Boolean = false
 )
 
+sealed class ViewContext {
+    object Inbox : ViewContext()
+    object Today : ViewContext()
+    object Tomorrow : ViewContext()
+    object Postponed : ViewContext()
+    object Important : ViewContext()
+    object Completed : ViewContext()
+    object Trash : ViewContext()
+    data class Category(val categoryId: String) : ViewContext()
+}
+
 @HiltViewModel
 class TaskViewModel @Inject constructor(
     private val taskDao: TaskDao,
@@ -40,9 +51,8 @@ class TaskViewModel @Inject constructor(
     private val digitalInkHelper: DigitalInkHelper
 ) : ViewModel() {
 
-    // Categoría actualmente seleccionada (null = vista global)
-    private val _activeCategoryId = MutableStateFlow<String?>(null)
-    val activeCategoryId: StateFlow<String?> = _activeCategoryId.asStateFlow()
+    private val _activeContext = MutableStateFlow<ViewContext>(ViewContext.Inbox)
+    val activeContext: StateFlow<ViewContext> = _activeContext.asStateFlow()
 
     private val _filterState = MutableStateFlow(FilterState())
     val filterState: StateFlow<FilterState> = _filterState.asStateFlow()
@@ -50,20 +60,32 @@ class TaskViewModel @Inject constructor(
     fun updateFilterState(newState: FilterState) {
         _filterState.value = newState
     }
+    
+    fun setContext(context: ViewContext) {
+        _activeContext.value = context
+        if (context is ViewContext.Category) {
+            viewModelScope.launch { categoryDao.updateLastUsed(context.categoryId) }
+        }
+    }
 
     val allCategories: StateFlow<List<CategoryEntity>> = categoryDao.getAllCategories()
         .catch { e -> Log.e("TaskPenML", "Error leyendo categorías: ${e.message}", e); emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val pendingTasks: StateFlow<List<TaskEntity>> = taskDao.getPendingTasks()
-        .catch { e -> Log.e("TaskPenML", "Error al leer tareas: ${e.message}", e); emit(emptyList()) }
+    val recentCategories: StateFlow<List<CategoryEntity>> = categoryDao.getRecentCategories(4)
+        .catch { emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val activeTags: StateFlow<List<SubjectEntity>> = _activeCategoryId.flatMapLatest { catId ->
-        if (catId == null) kotlinx.coroutines.flow.flowOf(emptyList())
-        else subjectDao.getSubjectsByCategory(catId)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val activeTasks: StateFlow<List<TaskEntity>> = taskDao.getAllActiveTasks()
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        
+    val deletedTasks: StateFlow<List<TaskEntity>> = taskDao.getDeletedTasks()
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allTags: StateFlow<List<SubjectEntity>> = subjectDao.getAllSubjectsOnceFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         viewModelScope.launch {
@@ -77,9 +99,7 @@ class TaskViewModel @Inject constructor(
         }
     }
 
-    fun setActiveCategory(categoryId: String?) {
-        _activeCategoryId.value = categoryId
-    }
+
 
     fun createCategory(name: String, colorHex: String = "#6200EE") {
         viewModelScope.launch {
@@ -121,9 +141,10 @@ class TaskViewModel @Inject constructor(
 
                 if (recognizedLines.isNotEmpty()) {
                     val existingSubcategories = subjectDao.getAllSubjectsOnce()
+                    val currentCategory = (_activeContext.value as? ViewContext.Category)?.categoryId
                     val result = parseHandwrittenTextUseCase(
                         linesWithX = recognizedLines,
-                        activeCategoryId = _activeCategoryId.value,
+                        activeCategoryId = currentCategory,
                         existingSubcategories = existingSubcategories
                     )
                     Log.d("TaskPenML", "Tareas: ${result.tasks.size}, Nuevas subcategorías: ${result.newSubcategories.size}")
@@ -134,6 +155,25 @@ class TaskViewModel @Inject constructor(
             } catch (e: Throwable) {
                 Log.e("TaskPenML", "Error al procesar la tinta: ${e.message}", e)
                 onResult(ParseResult(emptyList(), emptyList()))
+            }
+        }
+    }
+
+    fun processText(text: String) {
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val lines = text.split("\n").map { Pair(it, 0f) }
+                val existingSubcategories = subjectDao.getAllSubjectsOnce()
+                val currentCategory = (_activeContext.value as? ViewContext.Category)?.categoryId
+                val result = parseHandwrittenTextUseCase(
+                    linesWithX = lines,
+                    activeCategoryId = currentCategory,
+                    existingSubcategories = existingSubcategories
+                )
+                saveParseResult(result)
+            } catch (e: Throwable) {
+                Log.e("TaskPenML", "Error al procesar texto manual: ${e.message}", e)
             }
         }
     }

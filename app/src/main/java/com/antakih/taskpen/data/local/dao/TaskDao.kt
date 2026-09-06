@@ -35,6 +35,18 @@ interface TaskDao {
     @Query("UPDATE tasks SET isImportant = :isImportant WHERE id = :taskId")
     suspend fun updateTaskImportance(taskId: String, isImportant: Boolean)
 
+    @Query("SELECT * FROM tasks WHERE isDeleted = 0 ORDER BY dueDate ASC")
+    fun getAllActiveTasks(): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM tasks WHERE isDeleted = 1 ORDER BY dueDate ASC")
+    fun getDeletedTasks(): Flow<List<TaskEntity>>
+
+    @Query("UPDATE tasks SET isDeleted = 1 WHERE id = :taskId")
+    suspend fun moveToTrash(taskId: String)
+
+    @Query("UPDATE tasks SET isDeleted = 0 WHERE id = :taskId")
+    suspend fun restoreFromTrash(taskId: String)
+
     @Query("DELETE FROM tasks WHERE id = :taskId")
-    suspend fun deleteTask(taskId: String)
+    suspend fun permanentlyDeleteTask(taskId: String)
 }

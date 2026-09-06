@@ -27,13 +27,20 @@ object DatabaseModule {
                 database.execSQL("ALTER TABLE tasks ADD COLUMN isImportant INTEGER NOT NULL DEFAULT 0")
             }
         }
+        
+        val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE tasks ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE categories ADD COLUMN lastUsed INTEGER NOT NULL DEFAULT 0")
+            }
+        }
 
         return Room.databaseBuilder(
             context,
             AppDatabase::class.java,
             "taskpen_database"
         )
-        .addMigrations(MIGRATION_3_4)
+        .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
         .fallbackToDestructiveMigration(dropAllTables = true)
         .build()
     }

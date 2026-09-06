@@ -25,5 +25,6 @@ data class TaskEntity(
     val hasSpecificTime: Boolean,
     val isCompleted: Boolean,
     @ColumnInfo(defaultValue = "0") val isImportant: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val isDeleted: Boolean = false,
     val calendarEventId: String?
 )

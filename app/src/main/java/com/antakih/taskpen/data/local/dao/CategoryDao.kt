@@ -1,4 +1,4 @@
-﻿package com.antakih.taskpen.data.local.dao
+package com.antakih.taskpen.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -15,6 +15,12 @@ interface CategoryDao {
 
     @Query("SELECT * FROM categories ORDER BY name ASC")
     fun getAllCategories(): Flow<List<CategoryEntity>>
+
+    @Query("SELECT * FROM categories ORDER BY lastUsed DESC LIMIT :limit")
+    fun getRecentCategories(limit: Int): Flow<List<CategoryEntity>>
+
+    @Query("UPDATE categories SET lastUsed = :timestamp WHERE id = :id")
+    suspend fun updateLastUsed(id: String, timestamp: Long = System.currentTimeMillis())
 
     @Query("SELECT * FROM categories WHERE id = :id")
     suspend fun getCategoryById(id: String): CategoryEntity?
