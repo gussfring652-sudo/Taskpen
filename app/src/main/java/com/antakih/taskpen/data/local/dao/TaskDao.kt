@@ -1,4 +1,4 @@
-package com.antakih.taskpen.data.local.dao
+﻿package com.antakih.taskpen.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -12,19 +12,23 @@ import kotlinx.coroutines.flow.Flow
 interface TaskDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTasks(tasks: List<TaskEntity>) // Para el insert masivo del S-Pen
+    suspend fun insertTasks(tasks: List<TaskEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTask(task: TaskEntity) // Para insertar una sola tarea manualmente
+    suspend fun insertTask(task: TaskEntity)
 
     @Update
     suspend fun updateTask(task: TaskEntity)
 
-    // Obtiene tareas pendientes, ordenadas por fecha límite. Retorna un Flow para actualizar la UI en tiempo real
-    @Query("SELECT * FROM tasks WHERE isCompleted = 0 ORDER BY dueDate ASC")
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND parentTaskId IS NULL AND categoryId = :categoryId ORDER BY dueDate ASC")
+    fun getTasksByCategory(categoryId: String): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND parentTaskId IS NULL ORDER BY dueDate ASC")
     fun getPendingTasks(): Flow<List<TaskEntity>>
 
-    // Marca una tarea como completada (usando UPDATE en lugar de borrarla por si quieres ver el historial)
+    @Query("SELECT * FROM tasks WHERE parentTaskId = :parentTaskId ORDER BY createdAt ASC")
+    fun getSubtasks(parentTaskId: String): Flow<List<TaskEntity>>
+
     @Query("UPDATE tasks SET isCompleted = 1 WHERE id = :taskId")
     suspend fun markTaskAsCompleted(taskId: String)
 

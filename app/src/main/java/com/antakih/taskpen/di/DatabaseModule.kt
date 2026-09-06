@@ -1,8 +1,10 @@
-package com.antakih.taskpen.di
+﻿package com.antakih.taskpen.di
 
 import android.content.Context
 import androidx.room.Room
 import com.antakih.taskpen.data.local.AppDatabase
+import com.antakih.taskpen.data.local.dao.CategoryDao
+import com.antakih.taskpen.data.local.dao.SubjectDao
 import com.antakih.taskpen.data.local.dao.TaskDao
 import dagger.Module
 import dagger.Provides
@@ -30,7 +32,11 @@ object DatabaseModule {
     }
 
     @Provides
-    fun provideTaskDao(database: AppDatabase): TaskDao {
-        return database.taskDao()
-    }
+    fun provideTaskDao(database: AppDatabase): TaskDao = database.taskDao()
+
+    @Provides
+    fun provideCategoryDao(database: AppDatabase): CategoryDao = database.categoryDao()
+
+    @Provides
+    fun provideSubjectDao(database: AppDatabase): SubjectDao = database.subjectDao()
 }

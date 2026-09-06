@@ -1,6 +1,8 @@
 package com.antakih.taskpen.ui.screens
 
+import android.os.Build
 import android.view.MotionEvent
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -20,27 +22,36 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
 import com.google.mlkit.vision.digitalink.Ink
+import androidx.compose.foundation.verticalScroll
 
-// Estructura para guardar un punto individual con su posición y el grosor derivado de la presión
+// Estructura para guardar un punto individual con su posición, grosor y timestamp para ML Kit
 data class PathPoint(
     val position: Offset,
-    val width: Float
+    val width: Float,
+    val timestamp: Long = System.currentTimeMillis()
 )
 
-// Estructura para guardar un trazo completo compuesto por puntos con presión dinámica
+// Estructura para guardar un trazo completo
 data class StrokeState(
     val points: List<PathPoint>,
-    val isEraser: Boolean
+    val isEraser: Boolean = false // Mantenemos por compatibilidad, aunque ya no guardaremos trazos de borrador
 )
 
+private fun strokeIntersects(stroke: StrokeState, eraserPos: Offset, eraserRadius: Float): Boolean {
+    for (point in stroke.points) {
+        val dist = (point.position - eraserPos).getDistance()
+        if (dist <= eraserRadius + (point.width / 2f)) {
+            return true
+        }
+    }
+    return false
+}
+
 @Composable
-fun DrawingScreen(viewModel: TaskViewModel) {
+fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
     // Memoria de trazos para renderizar en pantalla
     var strokes by remember { mutableStateOf(emptyList<StrokeState>()) }
     var currentStrokeState by remember { mutableStateOf<StrokeState?>(null) }
-
-    // ML KIT: Objeto Ink.Builder donde se acumulan las coordenadas físicas y timestamps para el modelo de IA
-    var inkBuilder by remember { mutableStateOf(Ink.builder()) }
 
     // Controles de estado
     var isEraserMode by remember { mutableStateOf(false) }
@@ -50,7 +61,14 @@ fun DrawingScreen(viewModel: TaskViewModel) {
     val basePenWidth = 14f
     val eraserWidth = 60f
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    // Estado para la interfaz de confirmación
+    var isProcessing by remember { mutableStateOf(false) }
+    var showConfirmationDialog by remember { mutableStateOf(false) }
+    var draftResult by remember { mutableStateOf<com.antakih.taskpen.domain.usecases.ParseResult?>(null) }
+    var draftTasks by remember { mutableStateOf<List<com.antakih.taskpen.data.local.entities.TaskEntity>>(emptyList()) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
         // Barra de Herramientas
         Row(
             modifier = Modifier
@@ -79,8 +97,6 @@ fun DrawingScreen(viewModel: TaskViewModel) {
             Button(
                 onClick = {
                     strokes = emptyList()
-                    // ML KIT: Vacía también los trazos guardados para la IA
-                    inkBuilder = Ink.builder()
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
             ) { Text("Limpiar") }
@@ -108,15 +124,6 @@ fun DrawingScreen(viewModel: TaskViewModel) {
                         val isHardwareEraser = isStylusButtonPressed(event, down.type)
                         val isActuallyErasing = isEraserMode || isHardwareEraser
 
-                        // ML KIT: Si estamos escribiendo (no borrando), iniciamos un nuevo trazo para la IA
-                        var strokeBuilder: Ink.Stroke.Builder? = null
-                        if (!isActuallyErasing) {
-                            strokeBuilder = Ink.Stroke.builder()
-                            strokeBuilder.addPoint(
-                                Ink.Point.create(down.position.x, down.position.y, System.currentTimeMillis())
-                            )
-                        }
-
                         // Calculamos el grosor según la presión recibida
                         var lastWidth = if (isActuallyErasing) {
                             eraserWidth
@@ -124,9 +131,15 @@ fun DrawingScreen(viewModel: TaskViewModel) {
                             (2f + basePenWidth * down.pressure).coerceAtLeast(2f)
                         }
 
-                        val initialPoint = PathPoint(down.position, lastWidth)
-                        var currentStroke = StrokeState(listOf(initialPoint), isActuallyErasing)
-                        currentStrokeState = currentStroke
+                        var currentStroke: StrokeState? = null
+
+                        if (isActuallyErasing) {
+                            strokes = strokes.filterNot { strokeIntersects(it, down.position, lastWidth / 2f) }
+                        } else {
+                            val initialPoint = PathPoint(down.position, lastWidth, System.currentTimeMillis())
+                            currentStroke = StrokeState(listOf(initialPoint), false)
+                            currentStrokeState = currentStroke
+                        }
 
                         do {
                             val dragEvent = awaitPointerEvent()
@@ -141,34 +154,30 @@ fun DrawingScreen(viewModel: TaskViewModel) {
                                 val smoothedWidth = lastWidth * 0.7f + rawWidth * 0.3f
                                 lastWidth = smoothedWidth
 
-                                val newPoint = PathPoint(drag.position, smoothedWidth)
-                                currentStroke = currentStroke.copy(points = currentStroke.points + newPoint)
-                                currentStrokeState = currentStroke
-
-                                // ML KIT: Registramos las coordenadas y timestamp de movimiento
-                                if (!isActuallyErasing) {
-                                    strokeBuilder?.addPoint(
-                                        Ink.Point.create(drag.position.x, drag.position.y, System.currentTimeMillis())
-                                    )
+                                if (isActuallyErasing) {
+                                    strokes = strokes.filterNot { strokeIntersects(it, drag.position, smoothedWidth / 2f) }
+                                } else {
+                                    val newPoint = PathPoint(drag.position, smoothedWidth, System.currentTimeMillis())
+                                    currentStroke?.let {
+                                        currentStroke = it.copy(points = it.points + newPoint)
+                                        currentStrokeState = currentStroke
+                                    }
                                 }
 
                                 drag.consume()
                             }
                         } while (dragEvent.changes.any { it.pressed })
 
-                        currentStrokeState?.let {
-                            strokes = strokes + it
-                        }
-                        currentStrokeState = null
-
-                        // ML KIT: Al levantar el S-Pen, cerramos el trazo y lo agregamos a inkBuilder
-                        if (!isActuallyErasing && strokeBuilder != null) {
-                            inkBuilder.addStroke(strokeBuilder.build())
+                        if (!isActuallyErasing) {
+                            currentStrokeState?.let {
+                                strokes = strokes + it
+                            }
+                            currentStrokeState = null
                         }
                     }
                 }
         ) {
-            // Dibuja el historial de trazos con sensibilidad a la presión
+            // Dibuja el historial de trazos
             strokes.forEach { stroke ->
                 drawVariableStroke(stroke)
             }
@@ -182,21 +191,150 @@ fun DrawingScreen(viewModel: TaskViewModel) {
         // Botón para procesar el texto con ML Kit
         Button(
             onClick = {
-                val inkToProcess = inkBuilder.build()
-                viewModel.processInk(inkToProcess) {
-                    // Al finalizar la conversión y guardado en DB, limpiamos el lienzo
-                    strokes = emptyList()
-                    inkBuilder = Ink.builder()
+                if (strokes.isEmpty()) {
+                    onFinished()
+                    return@Button
+                }
+
+                // 1. Calcular Y promedio y altura de cada trazo
+                val strokeCenters = strokes.map { stroke ->
+                    val ys = stroke.points.map { it.position.y }
+                    val top = ys.minOrNull() ?: 0f
+                    val bottom = ys.maxOrNull() ?: 0f
+                    val center = (top + bottom) / 2f
+                    val height = bottom - top
+                    Triple(stroke, center, height)
+                }
+
+                // 2. Calcular la altura promedio de los trazos (excluyendo trazos muy pequeños como puntos)
+                val avgStrokeHeight = strokeCenters
+                    .map { it.third }
+                    .filter { it > 8f }
+                    .average()
+                    .toFloat()
+                    .coerceAtLeast(30f)
+
+                // El umbral es adaptativo: si los centroides difieren más del 70% de la altura promedio
+                // de un trazo, son renglones distintos. Esto se adapta al tamaño de la letra del usuario.
+                val lineThreshold = avgStrokeHeight * 0.70f
+
+                // 3. Ordenar por la coordenada Y promedio
+                val sortedStrokes = strokeCenters.sortedBy { it.second }
+
+                // 4. Agrupar trazos en líneas con umbral adaptativo
+                val lines = mutableListOf<List<StrokeState>>()
+                var currentLine = mutableListOf<StrokeState>()
+                var currentCenter = -1f
+
+                sortedStrokes.forEach { (stroke, center, _) ->
+                    if (currentLine.isEmpty()) {
+                        currentLine.add(stroke)
+                        currentCenter = center
+                    } else {
+                        if (kotlin.math.abs(center - currentCenter) < lineThreshold) {
+                            currentLine.add(stroke)
+                            currentCenter = (currentCenter * (currentLine.size - 1) + center) / currentLine.size
+                        } else {
+                            lines.add(currentLine)
+                            currentLine = mutableListOf(stroke)
+                            currentCenter = center
+                        }
+                    }
+                }
+                if (currentLine.isNotEmpty()) {
+                    lines.add(currentLine)
+                }
+
+                // 4. Construir un objeto Ink por cada línea
+                val inks = lines.map { lineStrokes ->
+                    val inkBuilder = Ink.builder()
+                    // Ordenamos los trazos cronológicamente (como los dibujó el usuario)
+                    // Esto es VITAL para que ML Kit entienda la escritura
+                    val sortedByTime = lineStrokes.sortedBy { stroke ->
+                        stroke.points.firstOrNull()?.timestamp ?: 0L
+                    }
+                    sortedByTime.forEach { stroke ->
+                        val strokeBuilder = Ink.Stroke.builder()
+                        stroke.points.forEach { point ->
+                            strokeBuilder.addPoint(Ink.Point.create(point.position.x, point.position.y, point.timestamp))
+                        }
+                        inkBuilder.addStroke(strokeBuilder.build())
+                    }
+                    inkBuilder.build()
+                }
+                
+                isProcessing = true
+                viewModel.processInks(inks) { result ->
+                    draftResult = result
+                    draftTasks = result.tasks
+                    isProcessing = false
+                    showConfirmationDialog = true
                 }
             },
+            enabled = !isProcessing,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Text("Transformar a Tareas")
+            if (isProcessing) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(if (isProcessing) "Procesando..." else "Transformar a Tareas")
         }
     }
-}
+
+    if (showConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmationDialog = false },
+            title = { Text(if (draftTasks.isEmpty()) "Sin tareas detectadas" else "Confirma tus Tareas") },
+            text = {
+                if (draftTasks.isEmpty()) {
+                    Text("No se detectaron tareas válidas.\nRecuerda usar guiones o asteriscos al inicio de cada línea.")
+                } else {
+                    Column(modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                        draftTasks.forEachIndexed { index, task ->
+                            OutlinedTextField(
+                                value = task.title,
+                                onValueChange = { newTitle ->
+                                    val mutableTasks = draftTasks.toMutableList()
+                                    mutableTasks[index] = task.copy(title = newTitle)
+                                    draftTasks = mutableTasks
+                                },
+                                label = { Text("Tarea ${index + 1}") },
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (draftTasks.isNotEmpty()) {
+                    Button(onClick = {
+                        // Guardamos con las correcciones del usuario en los títulos
+                        val finalResult = draftResult?.copy(tasks = draftTasks)
+                        if (finalResult != null) {
+                            viewModel.saveParseResult(finalResult)
+                        } else {
+                            viewModel.saveTasks(draftTasks)
+                        }
+                        showConfirmationDialog = false
+                        strokes = emptyList()
+                        onFinished()
+                    }) {
+                        Text("Guardar y Cerrar")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmationDialog = false }) {
+                    Text(if (draftTasks.isEmpty()) "OK" else "Cancelar")
+                }
+            }
+        )
+    }
+} // Cierra el Box
+} // Cierra la función DrawingScreen
 
 // Función para renderizar un trazo considerando la presión y uniones suavizadas
 private fun DrawScope.drawVariableStroke(stroke: StrokeState) {
