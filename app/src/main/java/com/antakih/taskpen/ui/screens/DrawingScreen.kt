@@ -245,8 +245,12 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                     lines.add(currentLine)
                 }
 
-                // 4. Construir un objeto Ink por cada línea
-                val inks = lines.map { lineStrokes ->
+                // 5. Construir un objeto Ink por cada línea y calcular su X mínimo (indentación)
+                val inksWithX = lines.map { lineStrokes ->
+                    val minX = lineStrokes.minOfOrNull { stroke ->
+                        stroke.points.minOfOrNull { it.position.x } ?: Float.MAX_VALUE
+                    } ?: 0f
+
                     val inkBuilder = Ink.builder()
                     // Ordenamos los trazos cronológicamente (como los dibujó el usuario)
                     // Esto es VITAL para que ML Kit entienda la escritura
@@ -260,11 +264,11 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                         }
                         inkBuilder.addStroke(strokeBuilder.build())
                     }
-                    inkBuilder.build()
+                    Pair(inkBuilder.build(), minX)
                 }
                 
                 isProcessing = true
-                viewModel.processInks(inks) { result ->
+                viewModel.processInks(inksWithX) { result ->
                     draftResult = result
                     draftTasks = result.tasks
                     isProcessing = false
@@ -294,6 +298,10 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                 } else {
                     Column(modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                         draftTasks.forEachIndexed { index, task ->
+                            val isSubtask = task.parentTaskId != null
+                            val labelText = if (isSubtask) "Subtarea" else "Tarea principal"
+                            val paddingStart = if (isSubtask) 24.dp else 0.dp
+
                             OutlinedTextField(
                                 value = task.title,
                                 onValueChange = { newTitle ->
@@ -301,8 +309,10 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                                     mutableTasks[index] = task.copy(title = newTitle)
                                     draftTasks = mutableTasks
                                 },
-                                label = { Text("Tarea ${index + 1}") },
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                label = { Text(labelText) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = paddingStart, bottom = 8.dp)
                             )
                         }
                     }

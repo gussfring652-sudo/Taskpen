@@ -39,28 +39,71 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
      * @param existingSubcategories  Lista de subcategorías ya registradas en la BD para búsqueda fuzzy
      */
     operator fun invoke(
-        rawText: String,
+        linesWithX: List<Pair<String, Float>>,
         activeCategoryId: String? = null,
         existingSubcategories: List<SubjectEntity> = emptyList()
     ): ParseResult {
 
-        val normalizedText = normalizeMLKitOutput(rawText)
-        val lines = normalizedText.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val processedLines = mutableListOf<Pair<String, Float>>()
+        for ((rawLine, minX) in linesWithX) {
+            val normalized = normalizeMLKitOutput(rawLine)
+            for (subLine in normalized.lines()) {
+                val trimmed = subLine.trim()
+                if (trimmed.isNotEmpty()) {
+                    processedLines.add(Pair(trimmed, minX))
+                }
+            }
+        }
 
         val extractedTasks = mutableListOf<TaskEntity>()
         val newSubcategoriesToCreate = mutableListOf<SubjectEntity>()
 
         var activeDate: Long? = null
         var activeSubcategoryId: String? = null
+        var activeMainTaskX: Float? = null
+        var isInsideDescription = false
 
-        for (line in lines) {
+        for ((line, minX) in processedLines) {
 
-            // ── 1. ¿Es una SUBTAREA? (empieza con -)
+            // ── 0. BLOQUE DE DESCRIPCIÓN ENTRE PARÉNTESIS (Ignora sangría)
+            if (isInsideDescription) {
+                val hasClosing = line.contains(")")
+                val cleanLine = line.replace(")", "").trim()
+                if (cleanLine.isNotEmpty()) {
+                    val lastMainIdx = extractedTasks.indexOfLast { it.parentTaskId == null }
+                    if (lastMainIdx != -1) {
+                        val lastMain = extractedTasks[lastMainIdx]
+                        val newDesc = if (lastMain.description.isNullOrBlank()) cleanLine else "${lastMain.description} $cleanLine"
+                        extractedTasks[lastMainIdx] = lastMain.copy(description = newDesc)
+                    }
+                }
+                if (hasClosing) isInsideDescription = false
+                continue
+            }
+
+            if (line.startsWith("(")) {
+                val hasClosing = line.indexOf(")") > 0
+                val cleanLine = line.replace("(", "").replace(")", "").trim()
+                if (cleanLine.isNotEmpty()) {
+                    val lastMainIdx = extractedTasks.indexOfLast { it.parentTaskId == null }
+                    if (lastMainIdx != -1) {
+                        val lastMain = extractedTasks[lastMainIdx]
+                        val newDesc = if (lastMain.description.isNullOrBlank()) cleanLine else "${lastMain.description} $cleanLine"
+                        extractedTasks[lastMainIdx] = lastMain.copy(description = newDesc)
+                    }
+                }
+                if (!hasClosing) isInsideDescription = true
+                continue
+            }
+
+            // ── 1. ¿Es una SUBTAREA? (empieza con - o indentada)
             val subtaskMatch = subtaskMarkerRegex.find(line)
-            if (subtaskMatch != null) {
+            val isIndented = activeMainTaskX != null && (minX - activeMainTaskX > 40f)
+
+            if (subtaskMatch != null || isIndented) {
                 val lastTask = extractedTasks.lastOrNull { it.parentTaskId == null }
                 if (lastTask != null) {
-                    val subtaskTitle = subtaskMatch.groupValues[1].trim()
+                    val subtaskTitle = if (subtaskMatch != null) subtaskMatch.groupValues[1].trim() else line
                     val subtask = TaskEntity(
                         id = UUID.randomUUID().toString(),
                         title = subtaskTitle,
@@ -114,7 +157,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
                 val lastMainTask = extractedTasks.lastOrNull { it.parentTaskId == null }
                 if (lastMainTask != null) {
                     val updatedDesc = if (lastMainTask.description.isNullOrEmpty()) line
-                                     else "${lastMainTask.description}\n$line"
+                                     else "${lastMainTask.description} $line"
                     extractedTasks[extractedTasks.indexOfLast { it.parentTaskId == null }] =
                         lastMainTask.copy(description = updatedDesc)
                 }
@@ -184,6 +227,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
                 calendarEventId = null
             )
             extractedTasks.add(newTask)
+            activeMainTaskX = minX
         }
 
         return ParseResult(tasks = extractedTasks, newSubcategories = newSubcategoriesToCreate)

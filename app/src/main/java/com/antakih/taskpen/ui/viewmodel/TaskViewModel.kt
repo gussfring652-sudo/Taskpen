@@ -71,22 +71,24 @@ class TaskViewModel @Inject constructor(
         }
     }
 
-    // Reconoce la tinta, devuelve el ParseResult para confirmación del usuario
-    fun processInks(inks: List<Ink>, onResult: (ParseResult) -> Unit) {
+    // Reconoce la tinta y su indentación espacial, devuelve el ParseResult para confirmación
+    fun processInks(inksWithX: List<Pair<Ink, Float>>, onResult: (ParseResult) -> Unit) {
         viewModelScope.launch {
             try {
-                val fullTextBuilder = StringBuilder()
-                for (ink in inks) {
+                val recognizedLines = mutableListOf<Pair<String, Float>>()
+                for ((ink, minX) in inksWithX) {
                     val text = digitalInkHelper.recognizeText(ink)
-                    if (text.isNotBlank()) fullTextBuilder.append(text).append("\n")
+                    if (text.isNotBlank()) {
+                        recognizedLines.add(Pair(text, minX))
+                    }
                 }
-                val recognizedText = fullTextBuilder.toString().trim()
-                Log.d("TaskPenML", "=== ML KIT LEYÓ ===\n[$recognizedText]")
+                
+                Log.d("TaskPenML", "=== ML KIT LEYÓ ===\n${recognizedLines.joinToString("\n") { "[${it.second}] ${it.first}" }}")
 
-                if (recognizedText.isNotBlank()) {
+                if (recognizedLines.isNotEmpty()) {
                     val existingSubcategories = subjectDao.getAllSubjectsOnce()
                     val result = parseHandwrittenTextUseCase(
-                        rawText = recognizedText,
+                        linesWithX = recognizedLines,
                         activeCategoryId = _activeCategoryId.value,
                         existingSubcategories = existingSubcategories
                     )
