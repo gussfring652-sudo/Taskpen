@@ -37,7 +37,10 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(viewModel: TaskViewModel) {
+fun DashboardScreen(
+    viewModel: TaskViewModel,
+    onTaskClick: (TaskEntity) -> Unit = {}
+) {
     val activeContext by viewModel.activeContext.collectAsState()
     val filterState by viewModel.filterState.collectAsState()
     val allCategories by viewModel.allCategories.collectAsState()
@@ -272,7 +275,8 @@ fun DashboardScreen(viewModel: TaskViewModel) {
                                 task = task,
                                 tags = allTags,
                                 onComplete = { viewModel.completeTask(task.id) },
-                                onToggleImportant = { viewModel.toggleTaskImportance(task.id, !task.isImportant) }
+                                onToggleImportant = { viewModel.toggleTaskImportance(task.id, !task.isImportant) },
+                                onClick = { onTaskClick(task) }
                             )
                             Spacer(Modifier.height(8.dp))
                         }
