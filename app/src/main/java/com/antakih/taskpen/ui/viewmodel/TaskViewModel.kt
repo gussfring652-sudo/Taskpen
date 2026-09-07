@@ -11,7 +11,6 @@ import com.antakih.taskpen.data.local.entities.SubjectEntity
 import com.antakih.taskpen.data.local.entities.TaskEntity
 import com.antakih.taskpen.domain.mlkit.DigitalInkHelper
 import com.antakih.taskpen.domain.usecases.ParseHandwrittenTextUseCase
-import com.antakih.taskpen.domain.usecases.ParseResult
 import com.google.mlkit.vision.digitalink.Ink
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -128,8 +127,8 @@ class TaskViewModel @Inject constructor(
         }
     }
 
-    // Reconoce la tinta y su indentación espacial, devuelve el ParseResult para confirmación
-    fun processInks(inksWithX: List<Pair<Ink, Float>>, onResult: (ParseResult) -> Unit) {
+    // Reconoce la tinta y su indentación espacial, devuelve la lista de tareas
+    fun processInks(inksWithX: List<Pair<Ink, Float>>, onResult: (List<TaskEntity>) -> Unit) {
         viewModelScope.launch {
             try {
                 val recognizedLines = mutableListOf<Pair<String, Float>>()
@@ -140,24 +139,19 @@ class TaskViewModel @Inject constructor(
                     }
                 }
                 
-                Log.d("TaskPenML", "=== ML KIT LEYÓ ===\n${recognizedLines.joinToString("\n") { "[${it.second}] ${it.first}" }}")
-
                 if (recognizedLines.isNotEmpty()) {
-                    val existingSubcategories = subjectDao.getAllSubjectsOnce()
                     val currentCategory = (_activeContext.value as? ViewContext.Category)?.categoryId
-                    val result = parseHandwrittenTextUseCase(
+                    val tasks = parseHandwrittenTextUseCase(
                         linesWithX = recognizedLines,
-                        activeCategoryId = currentCategory,
-                        existingSubcategories = existingSubcategories
+                        activeCategoryId = currentCategory
                     )
-                    Log.d("TaskPenML", "Tareas: ${result.tasks.size}, Nuevas subcategorías: ${result.newSubcategories.size}")
-                    onResult(result)
+                    onResult(tasks)
                 } else {
-                    onResult(ParseResult(emptyList(), emptyList()))
+                    onResult(emptyList())
                 }
             } catch (e: Throwable) {
                 Log.e("TaskPenML", "Error al procesar la tinta: ${e.message}", e)
-                onResult(ParseResult(emptyList(), emptyList()))
+                onResult(emptyList())
             }
         }
     }
@@ -167,32 +161,14 @@ class TaskViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val lines = text.split("\n").map { Pair(it, 0f) }
-                val existingSubcategories = subjectDao.getAllSubjectsOnce()
                 val currentCategory = (_activeContext.value as? ViewContext.Category)?.categoryId
-                val result = parseHandwrittenTextUseCase(
+                val tasks = parseHandwrittenTextUseCase(
                     linesWithX = lines,
-                    activeCategoryId = currentCategory,
-                    existingSubcategories = existingSubcategories
+                    activeCategoryId = currentCategory
                 )
-                saveParseResult(result)
+                saveTasks(tasks)
             } catch (e: Throwable) {
                 Log.e("TaskPenML", "Error al procesar texto manual: ${e.message}", e)
-            }
-        }
-    }
-
-    // Guarda las tareas confirmadas (y crea las nuevas subcategorías detectadas)
-    fun saveParseResult(result: ParseResult) {
-        viewModelScope.launch {
-            try {
-                if (result.newSubcategories.isNotEmpty()) {
-                    subjectDao.insertSubjects(result.newSubcategories)
-                    Log.d("TaskPenML", "Nuevas subcategorías creadas: ${result.newSubcategories.map { it.fullName }}")
-                }
-                taskDao.insertTasks(result.tasks)
-                Log.d("TaskPenML", "Tareas guardadas exitosamente: ${result.tasks.size}")
-            } catch (e: Throwable) {
-                Log.e("TaskPenML", "Error al guardar tareas: ${e.message}", e)
             }
         }
     }

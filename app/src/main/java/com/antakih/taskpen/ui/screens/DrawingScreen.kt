@@ -64,7 +64,6 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
     // Estado para la interfaz de confirmación
     var isProcessing by remember { mutableStateOf(false) }
     var showConfirmationDialog by remember { mutableStateOf(false) }
-    var draftResult by remember { mutableStateOf<com.antakih.taskpen.domain.usecases.ParseResult?>(null) }
     var draftTasks by remember { mutableStateOf<List<com.antakih.taskpen.data.local.entities.TaskEntity>>(emptyList()) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -268,9 +267,8 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                 }
                 
                 isProcessing = true
-                viewModel.processInks(inksWithX) { result ->
-                    draftResult = result
-                    draftTasks = result.tasks
+                viewModel.processInks(inksWithX) { tasks ->
+                    draftTasks = tasks
                     isProcessing = false
                     showConfirmationDialog = true
                 }
@@ -291,12 +289,12 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
     if (showConfirmationDialog) {
         AlertDialog(
             onDismissRequest = { showConfirmationDialog = false },
-            title = { Text(if (draftTasks.isEmpty()) "Sin tareas detectadas" else "Confirma tus Tareas") },
+            title = { Text("Revisar Tareas Reconocidas") },
             text = {
-                if (draftTasks.isEmpty()) {
-                    Text("No se detectaron tareas válidas.\nRecuerda usar guiones o asteriscos al inicio de cada línea.")
-                } else {
-                    Column(modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                Column(modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    if (draftTasks.isEmpty()) {
+                        Text("No se detectaron tareas legibles.")
+                    } else {
                         draftTasks.forEachIndexed { index, task ->
                             val isSubtask = task.parentTaskId != null
                             val labelText = if (isSubtask) "Subtarea" else "Tarea principal"
@@ -322,12 +320,7 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                 if (draftTasks.isNotEmpty()) {
                     Button(onClick = {
                         // Guardamos con las correcciones del usuario en los títulos
-                        val finalResult = draftResult?.copy(tasks = draftTasks)
-                        if (finalResult != null) {
-                            viewModel.saveParseResult(finalResult)
-                        } else {
-                            viewModel.saveTasks(draftTasks)
-                        }
+                        viewModel.saveTasks(draftTasks)
                         showConfirmationDialog = false
                         strokes = emptyList()
                         onFinished()
