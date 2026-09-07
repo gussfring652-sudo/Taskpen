@@ -1,49 +1,33 @@
-package com.antakih.taskpen.ui.screens
+﻿import sys
+import re
 
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberTimePickerState
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Clear
-import java.util.Calendar
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.Color
+file_path = 'app/src/main/java/com/antakih/taskpen/ui/screens/DashboardScreen.kt'
+with open(file_path, 'r', encoding='utf-8') as f:
+    content = f.read()
+
+imports_to_add = """
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import com.antakih.taskpen.data.local.entities.CategoryEntity
-import com.antakih.taskpen.data.local.entities.TaskEntity
-import com.antakih.taskpen.ui.viewmodel.TaskViewModel
-import com.antakih.taskpen.ui.viewmodel.ViewContext
-import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+"""
 
-@OptIn(ExperimentalMaterial3Api::class)
+for imp in imports_to_add.strip().split('\n'):
+    if imp not in content:
+        content = content.replace('import androidx.compose.runtime.*', 'import androidx.compose.runtime.*\n' + imp)
+
+# Replace DashboardScreen logic
+# We will use regex to find the body of DashboardScreen and replace it safely.
+# It's better to just extract the whole DashboardScreen function and replace it.
+
+start_idx = content.find('@OptIn(ExperimentalMaterial3Api::class)\n@Composable\nfun DashboardScreen(')
+end_idx = content.find('@Composable\nfun TaskCard(')
+
+dashboard_screen_full = """@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     viewModel: TaskViewModel,
@@ -343,7 +327,7 @@ fun DashboardScreen(
     if (showFilterDialog) {
         FilterDialog(
             tags = allTags,
-            currentState = filterState,
+            filterState = filterState,
             onDismiss = { showFilterDialog = false },
             onApply = { viewModel.updateFilterState(it); showFilterDialog = false }
         )
@@ -353,9 +337,8 @@ fun DashboardScreen(
         TagsDialog(
             tags = allTags,
             onDismiss = { showTagsDialog = false },
-            onAddTag = { name, aliases -> 
-                // Using an empty/default color for now or whatever addSubject needs
-            }
+            onCreateTag = { name, color -> viewModel.createSubject(name, color) },
+            onDeleteTag = { id -> viewModel.deleteSubject(id) }
         )
     }
 
@@ -392,470 +375,15 @@ fun DashboardScreen(
         )
     }
 }
-@Composable
-fun TaskCard(
-    task: TaskEntity,
-    tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
-    onComplete: () -> Unit,
-    onToggleImportant: () -> Unit,
-    onClick: () -> Unit = {}
-) {
-    val dateFormat = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
-    val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
-    val dateString = task.dueDate?.let {
-        if (task.hasSpecificTime) "${dateFormat.format(Date(it))} • ${timeFormat.format(Date(it))}"
-        else dateFormat.format(Date(it))
-    } ?: "Sin fecha"
+"""
 
-    val assignedTag = tags.find { it.id == task.subcategoryId }
+content = content[:start_idx] + dashboard_screen_full + content[end_idx:]
 
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(checked = task.isCompleted, onCheckedChange = { onComplete() })
-            Spacer(modifier = Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = task.title, style = MaterialTheme.typography.titleMedium)
-                if (assignedTag != null) {
-                    androidx.compose.material3.Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = MaterialTheme.shapes.small,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
-                    ) {
-                        Text(
-                            text = assignedTag.fullName,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-
-                Text(
-                    text = "Vence: $dateString",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = onToggleImportant) {
-                Icon(
-                    imageVector = if (task.isImportant) Icons.Filled.Star else Icons.Filled.StarBorder,
-                    contentDescription = "Marcar como importante",
-                    tint = if (task.isImportant) androidx.compose.ui.graphics.Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun TagsDialog(
-    tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
-    onDismiss: () -> Unit,
-    onAddTag: (name: String, aliases: List<String>) -> Unit
-) {
-    var newTagName by remember { mutableStateOf("") }
-    var newTagAliases by remember { mutableStateOf("") }
-
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            shape = MaterialTheme.shapes.large
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Administrar Etiquetas", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                OutlinedTextField(
-                    value = newTagName,
-                    onValueChange = { newTagName = it },
-                    label = { Text("Nombre de Etiqueta (Ej: Robótica)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = newTagAliases,
-                    onValueChange = { newTagAliases = it },
-                    label = { Text("Alias separados por coma (Ej: rb, robot)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        if (newTagName.isNotBlank()) {
-                            val aliasesList = newTagAliases.split(",")
-                                .map { it.trim().lowercase() }
-                                .filter { it.isNotEmpty() }
-                            onAddTag(newTagName.trim(), aliasesList)
-                            newTagName = ""
-                            newTagAliases = ""
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Añadir Etiqueta")
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Etiquetas actuales:", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                LazyColumn(modifier = Modifier.fillMaxHeight(0.4f)) {
-                    items(tags, key = { it.id }) { tag ->
-                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            androidx.compose.material3.Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                shape = MaterialTheme.shapes.small
-                            ) {
-                                Text(
-                                    text = tag.fullName,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Alias: " + tag.aliases.joinToString(", "),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                    Text("Cerrar")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun FilterDialog(
-    tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
-    currentState: com.antakih.taskpen.ui.viewmodel.FilterState,
-    onDismiss: () -> Unit,
-    onApply: (com.antakih.taskpen.ui.viewmodel.FilterState) -> Unit
-) {
-    var sortByDueDate by remember { mutableStateOf(currentState.sortByDueDate) }
-    var selectedTagIds by remember { mutableStateOf(currentState.selectedTagIds) }
-    var showOnlyImportant by remember { mutableStateOf(currentState.showOnlyImportant) }
-
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            shape = MaterialTheme.shapes.large
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Filtros y Orden", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text("Ordenar por:", style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = !sortByDueDate, onClick = { sortByDueDate = false })
-                    Text("Fecha de Creación")
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = sortByDueDate, onClick = { sortByDueDate = true })
-                    Text("Fecha de Vencimiento")
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text("Filtros:", style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = showOnlyImportant, onCheckedChange = { showOnlyImportant = it })
-                    Text("Solo Importantes (★)")
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Etiquetas:", style = MaterialTheme.typography.bodyMedium)
-                LazyColumn(modifier = Modifier.fillMaxHeight(0.3f)) {
-                    items(tags, key = { it.id }) { tag ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = selectedTagIds.contains(tag.id),
-                                onCheckedChange = { isChecked ->
-                                    val newSet = selectedTagIds.toMutableSet()
-                                    if (isChecked) newSet.add(tag.id) else newSet.remove(tag.id)
-                                    selectedTagIds = newSet
-                                }
-                            )
-                            Text(tag.fullName)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancelar")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = {
-                        onApply(com.antakih.taskpen.ui.viewmodel.FilterState(
-                            sortByDueDate = sortByDueDate,
-                            selectedTagIds = selectedTagIds,
-                            showOnlyImportant = showOnlyImportant
-                        ))
-                        onDismiss()
-                    }) {
-                        Text("Aplicar")
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ManualTaskSheet(
-    allCategories: List<CategoryEntity>,
-    allTags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
-    initialCategoryId: String?,
-    onDismiss: () -> Unit,
-    onSave: (TaskEntity, List<String>) -> Unit
-) {
-    var title by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-    var description by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-    var isImportant by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    var selectedCategoryId by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(initialCategoryId) }
-    var selectedTagId by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-    
-    var dueDateMillis by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
-    var hasTime by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    
-    var subtasks by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(listOf<String>()) }
-    var newSubtaskTitle by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-    
-    var showDatePicker by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    var showTimePicker by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    
-    val dateString = dueDateMillis?.let { java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(it)) } ?: "Sin fecha"
-    val timeString = if (hasTime && dueDateMillis != null) java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(dueDateMillis!!)) else "Sin hora"
-
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(16.dp).fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
-            Text("Crear Tarea", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(16.dp))
-            
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("Título de la Tarea") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = description,
-                onValueChange = { description = it },
-                label = { Text("Descripción (opcional)") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3
-            )
-            Spacer(Modifier.height(8.dp))
-            
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = { showDatePicker = true }) {
-                    Icon(Icons.Default.DateRange, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text(dateString)
-                }
-                TextButton(onClick = { showTimePicker = true }, enabled = dueDateMillis != null) {
-                    Icon(Icons.Default.Schedule, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text(timeString)
-                }
-            }
-            
-            Spacer(Modifier.height(8.dp))
-            
-            Text("Subtareas:", style = MaterialTheme.typography.titleMedium)
-            subtasks.forEachIndexed { index, st ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text("• $st", modifier = Modifier.weight(1f))
-                    IconButton(onClick = { subtasks = subtasks.toMutableList().apply { removeAt(index) } }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Eliminar")
-                    }
-                }
-            }
-            OutlinedTextField(
-                value = newSubtaskTitle,
-                onValueChange = { newSubtaskTitle = it },
-                label = { Text("Añadir subtarea...") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                trailingIcon = {
-                    IconButton(onClick = {
-                        if (newSubtaskTitle.isNotBlank()) {
-                            subtasks = subtasks + newSubtaskTitle.trim()
-                            newSubtaskTitle = ""
-                        }
-                    }) {
-                        Icon(Icons.Default.Add, contentDescription = "Agregar")
-                    }
-                }
-            )
-            
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = isImportant, onCheckedChange = { isImportant = it })
-                Text("Marcar como Importante (★)")
-            }
-            
-            Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = {
-                    if (title.isNotBlank()) {
-                        val task = TaskEntity(
-                            id = java.util.UUID.randomUUID().toString(),
-                            categoryId = selectedCategoryId,
-                            subcategoryId = selectedTagId,
-                            parentTaskId = null,
-                            title = title.trim(),
-                            description = description.trim().takeIf { it.isNotBlank() },
-                            createdAt = System.currentTimeMillis(),
-                            dueDate = dueDateMillis,
-                            hasSpecificTime = hasTime,
-                            isCompleted = false,
-                            isImportant = isImportant,
-                            isDeleted = false,
-                            calendarEventId = null
-                        )
-                        onSave(task, subtasks)
-                        onDismiss()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Guardar Tarea")
-            }
-            Spacer(Modifier.height(32.dp))
-        }
-    }
-    
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dueDateMillis ?: System.currentTimeMillis())
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    dueDateMillis = datePickerState.selectedDateMillis
-                    if (dueDateMillis == null) hasTime = false
-                    showDatePicker = false
-                }) { Text("Aceptar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
-
-    if (showTimePicker) {
-        val timePickerState = rememberTimePickerState()
-        AlertDialog(
-            onDismissRequest = { showTimePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    val cal = Calendar.getInstance()
-                    if (dueDateMillis != null) {
-                        cal.timeInMillis = dueDateMillis!!
-                    }
-                    cal.set(Calendar.HOUR_OF_DAY, timePickerState.hour)
-                    cal.set(Calendar.MINUTE, timePickerState.minute)
-                    dueDateMillis = cal.timeInMillis
-                    hasTime = true
-                    showTimePicker = false
-                }) { Text("Aceptar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) { Text("Cancelar") }
-            },
-            text = { TimePicker(state = timePickerState) }
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AllCategoriesSheet(
-    allCategories: List<CategoryEntity>,
-    onDismiss: () -> Unit,
-    onCategorySelected: (String) -> Unit,
-    onCreateCategory: (String, String) -> Unit
-) {
-    var showCreateForm by remember { mutableStateOf(false) }
-    var newCatName by remember { mutableStateOf("") }
-
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-            if (showCreateForm) {
-                Text("Nueva Categoría", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = newCatName,
-                    onValueChange = { newCatName = it },
-                    label = { Text("Nombre") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = { showCreateForm = false }) { Text("Cancelar") }
-                    Button(onClick = {
-                        if (newCatName.isNotBlank()) {
-                            onCreateCategory(newCatName.trim(), "#6200EE")
-                            showCreateForm = false
-                            onDismiss()
-                        }
-                    }) { Text("Crear") }
-                }
-            } else {
-                Text("Todas las categorías", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(8.dp))
-                LazyColumn(modifier = Modifier.fillMaxHeight(0.5f)) {
-                    items(allCategories, key = { it.id }) { cat ->
-                        ListItem(
-                            headlineContent = { Text(cat.name) },
-                            modifier = Modifier.clickable { onCategorySelected(cat.id) }
-                        )
-                    }
-                    item {
-                        ListItem(
-                            headlineContent = { Text("Crear nueva categoría...", color = MaterialTheme.colorScheme.primary) },
-                            leadingContent = { Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary) },
-                            modifier = Modifier.clickable { showCreateForm = true }
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(32.dp))
-        }
-    }
-}
-
-
+left_panel_composable = """
 @Composable
 fun LeftLandscapePanel(
     activeContext: ViewContext,
-    filterState: com.antakih.taskpen.ui.viewmodel.FilterState,
+    filterState: FilterState,
     allCategories: List<CategoryEntity>,
     onContextSelected: (ViewContext) -> Unit,
     onSearchChanged: (String) -> Unit,
@@ -962,3 +490,11 @@ fun LeftLandscapePanel(
         }
     }
 }
+"""
+
+if 'fun LeftLandscapePanel' not in content:
+    content += "\n" + left_panel_composable
+
+with open(file_path, 'w', encoding='utf-8') as f:
+    f.write(content)
+print('Refactoring completed successfully')

@@ -28,7 +28,10 @@ import javax.inject.Inject
 data class FilterState(
     val sortByDueDate: Boolean = false,
     val selectedTagIds: Set<String> = emptySet(),
-    val showOnlyImportant: Boolean = false
+    val showOnlyImportant: Boolean = false,
+    val searchQuery: String = "",
+    val selectedCategories: Set<String> = emptySet(),
+    val selectedTags: Set<String> = emptySet()
 )
 
 sealed class ViewContext {
