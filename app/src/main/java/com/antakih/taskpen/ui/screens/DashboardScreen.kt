@@ -892,16 +892,17 @@ fun LeftLandscapePanel(
             )
             Spacer(Modifier.width(8.dp))
             IconButton(onClick = onFilterClick) {
-                Icon(Icons.Default.FilterList, contentDescription = "Filtrar")
+                Icon(Icons.Default.FilterList, contentDescription = "Filtrar", tint = Color.White)
             }
             IconButton(onClick = onToggleImportantFilter) {
                 Icon(
                     imageVector = if (filterState.showOnlyImportant) Icons.Default.Star else Icons.Default.StarBorder,
-                    contentDescription = "Importante"
+                    contentDescription = "Importante",
+                    tint = Color.White
                 )
             }
             IconButton(onClick = onTagsClick) {
-                Icon(Icons.Default.Label, contentDescription = "Etiquetas")
+                Icon(Icons.Default.Label, contentDescription = "Etiquetas", tint = Color.White)
             }
         }
         
@@ -927,9 +928,9 @@ fun LeftLandscapePanel(
         
         // Categories Header
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("Categorías", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            Text("Categorías", style = MaterialTheme.typography.headlineMedium, color = Color.White, modifier = Modifier.weight(1f))
             IconButton(onClick = onSettingsClick) {
-                Icon(Icons.Default.Settings, contentDescription = "Ajustes")
+                Icon(Icons.Default.Settings, contentDescription = "Ajustes", tint = Color.White)
             }
         }
         
