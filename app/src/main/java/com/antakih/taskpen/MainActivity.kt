@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import com.antakih.taskpen.data.local.entities.CategoryEntity
 import com.antakih.taskpen.ui.screens.DashboardScreen
 import com.antakih.taskpen.ui.screens.TaskDetailScreen
+import com.antakih.taskpen.data.local.entities.TaskEntity
 import com.antakih.taskpen.ui.theme.TaskpenTheme
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
 import dagger.hilt.android.AndroidEntryPoint
