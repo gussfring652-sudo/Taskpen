@@ -72,18 +72,18 @@ fun DashboardScreen(
     val displayedTasks = remember(activeContext, filterState, activeTasks, deletedTasks) {
         val baseTasks = when (activeContext) {
             is ViewContext.Trash -> deletedTasks
-            is ViewContext.General -> activeTasks
-            is ViewContext.Category -> activeTasks.filter { it.categoryId == (activeContext as ViewContext.Category).categoryId }
+            is ViewContext.General -> activeTasks.filter { !it.isCompleted }
+            is ViewContext.Category -> activeTasks.filter { !it.isCompleted && it.categoryId == (activeContext as ViewContext.Category).categoryId }
             is ViewContext.Completed -> activeTasks.filter { it.isCompleted }
             is ViewContext.Important -> activeTasks.filter { it.isImportant && !it.isCompleted }
             is ViewContext.Today -> activeTasks.filter { 
-                it.dueDate != null && android.text.format.DateUtils.isToday(it.dueDate) 
+                !it.isCompleted && it.dueDate != null && android.text.format.DateUtils.isToday(it.dueDate) 
             }
             is ViewContext.Tomorrow -> activeTasks.filter {
-                it.dueDate != null && android.text.format.DateUtils.isToday(it.dueDate - 86400000)
+                !it.isCompleted && it.dueDate != null && android.text.format.DateUtils.isToday(it.dueDate - 86400000)
             }
             is ViewContext.Postponed -> activeTasks.filter {
-                it.dueDate != null && it.dueDate < System.currentTimeMillis() && !android.text.format.DateUtils.isToday(it.dueDate)
+                !it.isCompleted && it.dueDate != null && it.dueDate < System.currentTimeMillis() && !android.text.format.DateUtils.isToday(it.dueDate)
             }
         }
         
@@ -113,7 +113,7 @@ fun DashboardScreen(
     }
 
     val configuration = LocalConfiguration.current
-    val isLandscape = configuration.screenWidthDp >= 600
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE || configuration.screenWidthDp >= 840
 
     val mainContent = @Composable {
         Scaffold(
@@ -158,24 +158,21 @@ fun DashboardScreen(
                                 Icon(Icons.Default.Send, contentDescription = "Agregar")
                             }
                         },
-                        colors = if (isLandscape) TextFieldDefaults.colors(
-                            unfocusedContainerColor = Color.White,
-                            focusedContainerColor = Color.White
-                        ) else TextFieldDefaults.colors()
+                        colors = TextFieldDefaults.colors()
                     )
                     Spacer(Modifier.width(8.dp))
                     FloatingActionButton(
                         onClick = { showManualTaskSheet = true },
-                        containerColor = if (isLandscape) Color(0xFF00B0FF) else MaterialTheme.colorScheme.secondaryContainer
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Manual", tint = if (isLandscape) Color.White else LocalContentColor.current)
+                        Icon(Icons.Default.Add, contentDescription = "Manual", tint = LocalContentColor.current)
                     }
                     Spacer(Modifier.width(8.dp))
                     FloatingActionButton(
                         onClick = { showDrawingSheet = true },
-                        containerColor = if (isLandscape) Color(0xFF00B0FF) else MaterialTheme.colorScheme.primary
+                        containerColor = MaterialTheme.colorScheme.primary
                     ) {
-                        Icon(Icons.Default.Create, contentDescription = "Escribir con S-Pen", tint = if (isLandscape) Color.White else LocalContentColor.current)
+                        Icon(Icons.Default.Create, contentDescription = "Escribir con S-Pen", tint = LocalContentColor.current)
                     }
                 }
             },
@@ -231,7 +228,7 @@ fun DashboardScreen(
     }
 
     if (isLandscape) {
-        Row(modifier = Modifier.fillMaxSize().background(Color(0xFF280B45))) {
+        Row(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
             LeftLandscapePanel(
                 activeContext = activeContext,
                 filterState = filterState,
@@ -248,7 +245,7 @@ fun DashboardScreen(
                 },
                 modifier = Modifier.width(360.dp).fillMaxHeight()
             )
-            Box(modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0xFF5D5270))) {
+            Box(modifier = Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
                 mainContent()
             }
         }
@@ -852,6 +849,22 @@ fun AllCategoriesSheet(
 }
 
 
+
+@Composable
+fun MenuButton(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Text(text)
+    }
+}
+
 @Composable
 fun LeftLandscapePanel(
     activeContext: ViewContext,
@@ -866,80 +879,57 @@ fun LeftLandscapePanel(
     onCategoryClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.padding(16.dp)) {
+    Column(modifier = modifier.statusBarsPadding().padding(16.dp)) {
         // Top Row: Search + Filter + Star
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = filterState.searchQuery,
                 onValueChange = onSearchChanged,
                 modifier = Modifier.weight(1f).height(50.dp),
-                placeholder = { Text("Search", color = Color.Gray) },
-                colors = TextFieldDefaults.colors(
-                    unfocusedContainerColor = Color.White,
-                    focusedContainerColor = Color.White,
-                    unfocusedTextColor = Color.Black,
-                    focusedTextColor = Color.Black
-                ),
-                leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.Gray) },
+                placeholder = { Text("Search") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
                 singleLine = true
             )
             Spacer(Modifier.width(8.dp))
             IconButton(onClick = onFilterClick) {
-                Icon(Icons.Default.FilterList, contentDescription = "Filtrar", tint = Color.White)
+                Icon(Icons.Default.FilterList, contentDescription = "Filtrar")
             }
             IconButton(onClick = onToggleImportantFilter) {
                 Icon(
                     imageVector = if (filterState.showOnlyImportant) Icons.Default.Star else Icons.Default.StarBorder,
-                    contentDescription = "Importante",
-                    tint = Color.White
+                    contentDescription = "Importante"
                 )
             }
             IconButton(onClick = onTagsClick) {
-                Icon(Icons.Default.Label, contentDescription = "Etiquetas", tint = Color.White)
+                Icon(Icons.Default.Label, contentDescription = "Etiquetas")
             }
         }
         
         Spacer(Modifier.height(24.dp))
         
-        // 2x2 Grid for buttons
-        val cyanColor = Color(0xFF00B0FF)
+        // 3x2 Grid for buttons
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { onContextSelected(ViewContext.Today) },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = if (activeContext is ViewContext.Today) Color.White else cyanColor),
-                shape = RectangleShape
-            ) { Text("Hoy", color = if (activeContext is ViewContext.Today) Color.Black else Color.White) }
-            Button(
-                onClick = { onContextSelected(ViewContext.Tomorrow) },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = if (activeContext is ViewContext.Tomorrow) Color.White else cyanColor),
-                shape = RectangleShape
-            ) { Text("Mañana", color = if (activeContext is ViewContext.Tomorrow) Color.Black else Color.White) }
+            MenuButton("General", activeContext is ViewContext.General, { onContextSelected(ViewContext.General) }, Modifier.weight(1f))
+            MenuButton("Hoy", activeContext is ViewContext.Today, { onContextSelected(ViewContext.Today) }, Modifier.weight(1f))
         }
         Spacer(Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { onContextSelected(ViewContext.Completed) },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = if (activeContext is ViewContext.Completed) Color.White else cyanColor),
-                shape = RectangleShape
-            ) { Text("Completadas", color = if (activeContext is ViewContext.Completed) Color.Black else Color.White) }
-            Button(
-                onClick = { onContextSelected(ViewContext.Postponed) },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = if (activeContext is ViewContext.Postponed) Color.White else cyanColor),
-                shape = RectangleShape
-            ) { Text("Pospuestas", color = if (activeContext is ViewContext.Postponed) Color.Black else Color.White) }
+            MenuButton("Mañana", activeContext is ViewContext.Tomorrow, { onContextSelected(ViewContext.Tomorrow) }, Modifier.weight(1f))
+            MenuButton("Pospuestas", activeContext is ViewContext.Postponed, { onContextSelected(ViewContext.Postponed) }, Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MenuButton("Completadas", activeContext is ViewContext.Completed, { onContextSelected(ViewContext.Completed) }, Modifier.weight(1f))
+            MenuButton("Papelera", activeContext is ViewContext.Trash, { onContextSelected(ViewContext.Trash) }, Modifier.weight(1f))
         }
         
         Spacer(Modifier.height(32.dp))
         
         // Categories Header
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("Categorías", color = Color.White, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            Text("Categorías", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
             IconButton(onClick = onSettingsClick) {
-                Icon(Icons.Default.Settings, contentDescription = "Ajustes", tint = Color.White)
+                Icon(Icons.Default.Settings, contentDescription = "Ajustes")
             }
         }
         
@@ -948,14 +938,15 @@ fun LeftLandscapePanel(
         // Categories list
         LazyColumn(modifier = Modifier.fillMaxWidth()) {
             items(allCategories, key = { it.id }) { cat ->
+                val isSelected = (activeContext as? ViewContext.Category)?.categoryId == cat.id
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onCategoryClick(cat.id) },
-                    colors = CardDefaults.cardColors(containerColor = if ((activeContext as? ViewContext.Category)?.categoryId == cat.id) Color.LightGray else Color.White),
-                    shape = RectangleShape
+                    colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MaterialTheme.shapes.medium
                 ) {
                     Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text(cat.name, color = Color.Black)
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.Gray)
+                        Text(cat.name, color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
