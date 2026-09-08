@@ -12,7 +12,7 @@ import com.antakih.taskpen.data.local.entities.TaskEntity
 
 @Database(
     entities = [CategoryEntity::class, SubjectEntity::class, TaskEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

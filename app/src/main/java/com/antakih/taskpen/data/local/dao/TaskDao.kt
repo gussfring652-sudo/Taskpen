@@ -32,6 +32,9 @@ interface TaskDao {
     @Query("UPDATE tasks SET isCompleted = 1 WHERE id = :taskId")
     suspend fun markTaskAsCompleted(taskId: String)
 
+    @Query("UPDATE tasks SET isCompleted = 0 WHERE id = :taskId")
+    suspend fun unmarkTaskAsCompleted(taskId: String)
+
     @Query("UPDATE tasks SET isImportant = :isImportant WHERE id = :taskId")
     suspend fun updateTaskImportance(taskId: String, isImportant: Boolean)
 
@@ -41,10 +44,13 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE isDeleted = 1 AND parentTaskId IS NULL ORDER BY dueDate ASC")
     fun getDeletedTasks(): Flow<List<TaskEntity>>
 
-    @Query("UPDATE tasks SET isDeleted = 1 WHERE id = :taskId")
-    suspend fun moveToTrash(taskId: String)
+    @Query("DELETE FROM tasks WHERE isDeleted = 1 AND deletedAt < :threshold")
+    suspend fun deleteOldTrashTasks(threshold: Long)
 
-    @Query("UPDATE tasks SET isDeleted = 0 WHERE id = :taskId")
+    @Query("UPDATE tasks SET isDeleted = 1, deletedAt = :timestamp WHERE id = :taskId")
+    suspend fun moveToTrash(taskId: String, timestamp: Long = System.currentTimeMillis())
+
+    @Query("UPDATE tasks SET isDeleted = 0, deletedAt = NULL WHERE id = :taskId")
     suspend fun restoreFromTrash(taskId: String)
 
     @Query("DELETE FROM tasks WHERE id = :taskId")

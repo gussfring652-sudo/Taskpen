@@ -92,6 +92,14 @@ class TaskViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             try {
+                // Delete tasks that have been in trash for more than 30 days
+                val thirtyDaysInMillis = 30L * 24 * 60 * 60 * 1000
+                taskDao.deleteOldTrashTasks(System.currentTimeMillis() - thirtyDaysInMillis)
+            } catch (e: Throwable) {
+                Log.e("TaskViewModel", "Error limpiando papelera: ${e.message}")
+            }
+            
+            try {
                 Log.d("TaskPenML", "Iniciando descarga/verificación del modelo de idioma...")
                 val success = digitalInkHelper.downloadAndInitModel()
                 Log.d("TaskPenML", if (success) "Modelo de Español listo" else "Fallo al preparar el modelo.")
@@ -114,7 +122,7 @@ class TaskViewModel @Inject constructor(
         }
     }
 
-    fun createTag(categoryId: String, name: String, aliases: List<String>) {
+    fun createTag(categoryId: String?, name: String, aliases: List<String>) {
         viewModelScope.launch {
             val tag = SubjectEntity(
                 id = UUID.randomUUID().toString(),
@@ -124,6 +132,25 @@ class TaskViewModel @Inject constructor(
                 semester = null
             )
             subjectDao.insertSubject(tag)
+        }
+    }
+
+    fun updateTag(id: String, categoryId: String?, name: String, aliases: List<String>) {
+        viewModelScope.launch {
+            val tag = SubjectEntity(
+                id = id,
+                categoryId = categoryId,
+                fullName = name,
+                aliases = aliases,
+                semester = null
+            )
+            subjectDao.updateSubject(tag)
+        }
+    }
+
+    fun deleteTag(id: String) {
+        viewModelScope.launch {
+            subjectDao.deleteSubject(id)
         }
     }
 
@@ -141,9 +168,11 @@ class TaskViewModel @Inject constructor(
                 
                 if (recognizedLines.isNotEmpty()) {
                     val currentCategory = (_activeContext.value as? ViewContext.Category)?.categoryId
+                    val existingTags = subjectDao.getAllSubjectsOnce()
                     val tasks = parseHandwrittenTextUseCase(
                         linesWithX = recognizedLines,
-                        activeCategoryId = currentCategory
+                        activeCategoryId = currentCategory,
+                        existingTags = existingTags
                     )
                     onResult(tasks)
                 } else {
@@ -162,9 +191,11 @@ class TaskViewModel @Inject constructor(
             try {
                 val lines = text.split("\n").map { Pair(it, 0f) }
                 val currentCategory = (_activeContext.value as? ViewContext.Category)?.categoryId
+                val existingTags = subjectDao.getAllSubjectsOnce()
                 val tasks = parseHandwrittenTextUseCase(
                     linesWithX = lines,
-                    activeCategoryId = currentCategory
+                    activeCategoryId = currentCategory,
+                    existingTags = existingTags
                 )
                 saveTasks(tasks)
             } catch (e: Throwable) {
@@ -196,6 +227,34 @@ class TaskViewModel @Inject constructor(
         viewModelScope.launch {
             try { taskDao.updateTaskImportance(taskId, isImportant) }
             catch (e: Throwable) { Log.e("TaskPenML", "Error al actualizar importancia: ${e.message}", e) }
+        }
+    }
+
+    fun uncompleteTask(taskId: String) {
+        viewModelScope.launch {
+            try { taskDao.unmarkTaskAsCompleted(taskId) }
+            catch (e: Throwable) { Log.e("TaskPenML", "Error al desmarcar tarea: ${e.message}", e) }
+        }
+    }
+
+    fun moveToTrash(taskId: String) {
+        viewModelScope.launch {
+            try { taskDao.moveToTrash(taskId) }
+            catch (e: Throwable) { Log.e("TaskPenML", "Error al mover a papelera: ${e.message}", e) }
+        }
+    }
+
+    fun restoreTask(taskId: String) {
+        viewModelScope.launch {
+            try { taskDao.restoreFromTrash(taskId) }
+            catch (e: Throwable) { Log.e("TaskPenML", "Error al restaurar tarea: ${e.message}", e) }
+        }
+    }
+
+    fun permanentlyDeleteTask(taskId: String) {
+        viewModelScope.launch {
+            try { taskDao.permanentlyDeleteTask(taskId) }
+            catch (e: Throwable) { Log.e("TaskPenML", "Error al eliminar tarea: ${e.message}", e) }
         }
     }
 

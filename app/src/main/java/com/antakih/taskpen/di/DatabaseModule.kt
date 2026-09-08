@@ -35,12 +35,26 @@ object DatabaseModule {
             }
         }
 
+        val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                // Task entity: add deletedAt
+                database.execSQL("ALTER TABLE tasks ADD COLUMN deletedAt INTEGER DEFAULT NULL")
+                
+                // Subject entity: make categoryId nullable
+                database.execSQL("CREATE TABLE IF NOT EXISTS `subjects_new` (`id` TEXT NOT NULL, `categoryId` TEXT DEFAULT NULL, `fullName` TEXT NOT NULL, `aliases` TEXT NOT NULL, `semester` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`categoryId`) REFERENCES `categories`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+                database.execSQL("INSERT INTO `subjects_new` (`id`, `categoryId`, `fullName`, `aliases`, `semester`) SELECT `id`, `categoryId`, `fullName`, `aliases`, `semester` FROM `subjects`")
+                database.execSQL("DROP TABLE `subjects`")
+                database.execSQL("ALTER TABLE `subjects_new` RENAME TO `subjects`")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_subjects_categoryId` ON `subjects` (`categoryId`)")
+            }
+        }
+
         return Room.databaseBuilder(
             context,
             AppDatabase::class.java,
             "taskpen_database"
         )
-        .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+        .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
         .fallbackToDestructiveMigration(dropAllTables = true)
         .build()
     }

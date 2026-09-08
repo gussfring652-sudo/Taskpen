@@ -1,6 +1,7 @@
 package com.antakih.taskpen.domain.usecases
 
 import com.antakih.taskpen.data.local.entities.TaskEntity
+import com.antakih.taskpen.data.local.entities.SubjectEntity
 import java.util.Calendar
 import java.util.UUID
 import javax.inject.Inject
@@ -11,7 +12,8 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
 
     operator fun invoke(
         linesWithX: List<Pair<String, Float>>,
-        activeCategoryId: String? = null
+        activeCategoryId: String? = null,
+        existingTags: List<SubjectEntity> = emptyList()
     ): List<TaskEntity> {
 
         val processedLines = mutableListOf<Pair<String, Float>>()

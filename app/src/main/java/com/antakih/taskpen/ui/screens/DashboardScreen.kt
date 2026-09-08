@@ -215,8 +215,14 @@ fun DashboardScreen(
                             TaskCard(
                                 task = task,
                                 tags = allTags,
+                                isTrashContext = activeContext is ViewContext.Trash,
+                                isCompletedContext = activeContext is ViewContext.Completed,
                                 onComplete = { viewModel.completeTask(task.id) },
+                                onUncomplete = { viewModel.uncompleteTask(task.id) },
                                 onToggleImportant = { viewModel.toggleTaskImportance(task.id, !task.isImportant) },
+                                onMoveToTrash = { viewModel.moveToTrash(task.id) },
+                                onRestore = { viewModel.restoreTask(task.id) },
+                                onDeletePermanently = { viewModel.permanentlyDeleteTask(task.id) },
                                 onClick = { onTaskClick(task) }
                             )
                             Spacer(Modifier.height(8.dp))
@@ -347,11 +353,20 @@ fun DashboardScreen(
     }
     
     if (showTagsDialog) {
+        val currentCategory = (activeContext as? ViewContext.Category)?.categoryId
         TagsDialog(
             tags = allTags,
+            categories = allCategories,
+            currentCategoryId = currentCategory,
             onDismiss = { showTagsDialog = false },
-            onAddTag = { name, aliases -> 
-                // Using an empty/default color for now or whatever addSubject needs
+            onAddTag = { categoryId, name, aliases -> 
+                viewModel.createTag(categoryId, name, aliases)
+            },
+            onUpdateTag = { id, categoryId, name, aliases ->
+                viewModel.updateTag(id, categoryId, name, aliases)
+            },
+            onDeleteTag = { id ->
+                viewModel.deleteTag(id)
             }
         )
     }
@@ -393,14 +408,20 @@ fun DashboardScreen(
 fun TaskCard(
     task: TaskEntity,
     tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
-    onComplete: () -> Unit,
-    onToggleImportant: () -> Unit,
+    isTrashContext: Boolean = false,
+    isCompletedContext: Boolean = false,
+    onComplete: () -> Unit = {},
+    onUncomplete: () -> Unit = {},
+    onToggleImportant: () -> Unit = {},
+    onMoveToTrash: () -> Unit = {},
+    onRestore: () -> Unit = {},
+    onDeletePermanently: () -> Unit = {},
     onClick: () -> Unit = {}
 ) {
     val dateFormat = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
     val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
     val dateString = task.dueDate?.let {
-        if (task.hasSpecificTime) "${dateFormat.format(Date(it))} • ${timeFormat.format(Date(it))}"
+        if (task.hasSpecificTime) "${dateFormat.format(Date(it))} - ${timeFormat.format(Date(it))}"
         else dateFormat.format(Date(it))
     } ?: "Sin fecha"
 
@@ -417,8 +438,12 @@ fun TaskCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(checked = task.isCompleted, onCheckedChange = { onComplete() })
-            Spacer(modifier = Modifier.width(8.dp))
+            if (!isTrashContext) {
+                Checkbox(checked = task.isCompleted, onCheckedChange = { 
+                    if (task.isCompleted) onUncomplete() else onComplete() 
+                })
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = task.title, style = MaterialTheme.typography.titleMedium)
                 if (assignedTag != null) {
@@ -442,12 +467,25 @@ fun TaskCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            IconButton(onClick = onToggleImportant) {
-                Icon(
-                    imageVector = if (task.isImportant) Icons.Filled.Star else Icons.Filled.StarBorder,
-                    contentDescription = "Marcar como importante",
-                    tint = if (task.isImportant) androidx.compose.ui.graphics.Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            
+            if (isTrashContext) {
+                IconButton(onClick = onRestore) {
+                    Icon(Icons.Default.Restore, contentDescription = "Restaurar")
+                }
+                IconButton(onClick = onDeletePermanently) {
+                    Icon(Icons.Default.DeleteForever, contentDescription = "Eliminar permanentemente", tint = Color.Red)
+                }
+            } else {
+                IconButton(onClick = onToggleImportant) {
+                    Icon(
+                        imageVector = if (task.isImportant) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = "Importante",
+                        tint = if (task.isImportant) Color.Yellow else LocalContentColor.current
+                    )
+                }
+                IconButton(onClick = onMoveToTrash) {
+                    Icon(Icons.Default.Delete, contentDescription = "Mover a papelera")
+                }
             }
         }
     }
@@ -456,11 +494,18 @@ fun TaskCard(
 @Composable
 fun TagsDialog(
     tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
+    categories: List<com.antakih.taskpen.data.local.entities.CategoryEntity>,
+    currentCategoryId: String?,
     onDismiss: () -> Unit,
-    onAddTag: (name: String, aliases: List<String>) -> Unit
+    onAddTag: (categoryId: String?, name: String, aliases: List<String>) -> Unit,
+    onUpdateTag: (id: String, categoryId: String?, name: String, aliases: List<String>) -> Unit,
+    onDeleteTag: (id: String) -> Unit
 ) {
-    var newTagName by remember { mutableStateOf("") }
-    var newTagAliases by remember { mutableStateOf("") }
+    var editingTagId by remember { mutableStateOf<String?>(null) }
+    var tagName by remember { mutableStateOf("") }
+    var tagAliases by remember { mutableStateOf("") }
+    var selectedCategoryId by remember { mutableStateOf<String?>(currentCategoryId) }
+    var categoryExpanded by remember { mutableStateOf(false) }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -468,66 +513,121 @@ fun TagsDialog(
             shape = MaterialTheme.shapes.large
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Administrar Etiquetas", style = MaterialTheme.typography.titleLarge)
+                Text(if (editingTagId == null) "Nueva Etiqueta" else "Editar Etiqueta", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 OutlinedTextField(
-                    value = newTagName,
-                    onValueChange = { newTagName = it },
-                    label = { Text("Nombre de Etiqueta (Ej: Robótica)") },
+                    value = tagName,
+                    onValueChange = { tagName = it },
+                    label = { Text("Nombre (Ej: Robótica)") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = newTagAliases,
-                    onValueChange = { newTagAliases = it },
-                    label = { Text("Alias separados por coma (Ej: rb, robot)") },
+                    value = tagAliases,
+                    onValueChange = { tagAliases = it },
+                    label = { Text("Alias separados por coma") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        if (newTagName.isNotBlank()) {
-                            val aliasesList = newTagAliases.split(",")
-                                .map { it.trim().lowercase() }
-                                .filter { it.isNotEmpty() }
-                            onAddTag(newTagName.trim(), aliasesList)
-                            newTagName = ""
-                            newTagAliases = ""
+
+                // Category selector
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = categories.find { it.id == selectedCategoryId }?.name ?: "Global (Sin Categoría)",
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Categoría") },
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingIcon = {
+                            IconButton(onClick = { categoryExpanded = !categoryExpanded }) {
+                                Icon(Icons.Default.ArrowDropDown, "Seleccionar")
+                            }
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Añadir Etiqueta")
+                    )
+                    DropdownMenu(
+                        expanded = categoryExpanded,
+                        onDismissRequest = { categoryExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Global (Sin Categoría)") },
+                            onClick = { 
+                                selectedCategoryId = null
+                                categoryExpanded = false 
+                            }
+                        )
+                        categories.forEach { cat ->
+                            DropdownMenuItem(
+                                text = { Text(cat.name) },
+                                onClick = { 
+                                    selectedCategoryId = cat.id
+                                    categoryExpanded = false 
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    if (editingTagId != null) {
+                        TextButton(onClick = {
+                            editingTagId = null
+                            tagName = ""
+                            tagAliases = ""
+                            selectedCategoryId = currentCategoryId
+                        }) {
+                            Text("Cancelar Edición")
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            if (tagName.isNotBlank()) {
+                                val aliasesList = tagAliases.split(",")
+                                    .map { it.trim().lowercase() }
+                                    .filter { it.isNotEmpty() }
+                                if (editingTagId == null) {
+                                    onAddTag(selectedCategoryId, tagName.trim(), aliasesList)
+                                } else {
+                                    onUpdateTag(editingTagId!!, selectedCategoryId, tagName.trim(), aliasesList)
+                                    editingTagId = null
+                                }
+                                tagName = ""
+                                tagAliases = ""
+                                selectedCategoryId = currentCategoryId
+                            }
+                        }
+                    ) {
+                        Text(if (editingTagId == null) "Añadir" else "Guardar")
+                    }
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Etiquetas actuales:", style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                LazyColumn(modifier = Modifier.fillMaxHeight(0.4f)) {
+                LazyColumn(modifier = Modifier.fillMaxHeight(0.5f)) {
                     items(tags, key = { it.id }) { tag ->
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            androidx.compose.material3.Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                shape = MaterialTheme.shapes.small
-                            ) {
-                                Text(
-                                    text = tag.fullName,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(tag.fullName, style = MaterialTheme.typography.bodyLarge)
+                                val catName = categories.find { it.id == tag.categoryId }?.name ?: "Global"
+                                Text(catName, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Alias: " + tag.aliases.joinToString(", "),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            IconButton(onClick = {
+                                editingTagId = tag.id
+                                tagName = tag.fullName
+                                tagAliases = tag.aliases.joinToString(", ")
+                                selectedCategoryId = tag.categoryId
+                            }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Editar", modifier = Modifier.size(20.dp))
+                            }
+                            IconButton(onClick = { onDeleteTag(tag.id) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color.Red, modifier = Modifier.size(20.dp))
+                            }
                         }
                     }
                 }
-                
                 Spacer(modifier = Modifier.height(16.dp))
                 TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
                     Text("Cerrar")
@@ -901,8 +1001,8 @@ fun LeftLandscapePanel(
                     tint = Color.White
                 )
             }
-            IconButton(onClick = onTagsClick) {
-                Icon(Icons.Default.Label, contentDescription = "Etiquetas", tint = Color.White)
+            IconButton(onClick = onSettingsClick) {
+                Icon(Icons.Default.Settings, contentDescription = "Ajustes", tint = Color.White)
             }
         }
         
@@ -929,8 +1029,8 @@ fun LeftLandscapePanel(
         // Categories Header
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("Categorías", style = MaterialTheme.typography.headlineMedium, color = Color.White, modifier = Modifier.weight(1f))
-            IconButton(onClick = onSettingsClick) {
-                Icon(Icons.Default.Settings, contentDescription = "Ajustes", tint = Color.White)
+            IconButton(onClick = onTagsClick) {
+                Icon(Icons.Default.Label, contentDescription = "Etiquetas", tint = Color.White)
             }
         }
         

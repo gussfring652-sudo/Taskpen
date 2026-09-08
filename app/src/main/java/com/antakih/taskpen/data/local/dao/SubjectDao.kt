@@ -28,6 +28,9 @@ interface SubjectDao {
     @Query("SELECT * FROM subjects ORDER BY fullName ASC")
     fun getAllSubjectsOnceFlow(): Flow<List<SubjectEntity>>
 
+    @androidx.room.Update
+    suspend fun updateSubject(subject: SubjectEntity)
+
     @Query("DELETE FROM subjects WHERE id = :id")
     suspend fun deleteSubject(id: String)
 }

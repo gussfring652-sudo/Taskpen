@@ -4,10 +4,41 @@ file_path = 'app/src/main/java/com/antakih/taskpen/ui/screens/DashboardScreen.kt
 with open(file_path, 'r', encoding='utf-8') as f:
     content = f.read()
 
-# Split before the FIRST occurrence of @Composable fun TagsDialog
-parts = content.split("@Composable\nfun TagsDialog(")
-if len(parts) > 1:
-    new_dialog = """@Composable
+# Replace the TagsDialog call
+old_call = """    if (showTagsDialog) {
+        TagsDialog(
+            tags = allTags,
+            onDismiss = { showTagsDialog = false },
+            onAddTag = { name, aliases -> 
+                // Using an empty/default color for now or whatever addSubject needs
+            }
+        )
+    }"""
+new_call = """    if (showTagsDialog) {
+        val currentCategory = (activeContext as? ViewContext.Category)?.categoryId
+        TagsDialog(
+            tags = allTags,
+            categories = categories,
+            currentCategoryId = currentCategory,
+            onDismiss = { showTagsDialog = false },
+            onAddTag = { categoryId, name, aliases -> 
+                viewModel.createTag(categoryId, name, aliases)
+            },
+            onUpdateTag = { id, categoryId, name, aliases ->
+                viewModel.updateTag(id, categoryId, name, aliases)
+            },
+            onDeleteTag = { id ->
+                viewModel.deleteTag(id)
+            }
+        )
+    }"""
+content = content.replace(old_call, new_call)
+
+# Now completely replace the TagsDialog composable.
+# Using regex to match from `@Composable fun TagsDialog` up to the end of the file or next composable.
+tags_dialog_pattern = re.compile(r'@Composable\s+fun TagsDialog\(.*?^$', re.MULTILINE | re.DOTALL)
+
+new_dialog = """@Composable
 fun TagsDialog(
     tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
     categories: List<com.antakih.taskpen.data.local.entities.CategoryEntity>,
@@ -17,55 +48,55 @@ fun TagsDialog(
     onUpdateTag: (id: String, categoryId: String?, name: String, aliases: List<String>) -> Unit,
     onDeleteTag: (id: String) -> Unit
 ) {
-    var editingTagId by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-    var tagName by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-    var tagAliases by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-    var selectedCategoryId by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(currentCategoryId) }
-    var categoryExpanded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var editingTagId by remember { mutableStateOf<String?>(null) }
+    var tagName by remember { mutableStateOf("") }
+    var tagAliases by remember { mutableStateOf("") }
+    var selectedCategoryId by remember { mutableStateOf<String?>(currentCategoryId) }
+    var categoryExpanded by remember { mutableStateOf(false) }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        androidx.compose.material3.Card(
-            modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth().padding(16.dp),
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             shape = MaterialTheme.shapes.large
         ) {
-            androidx.compose.foundation.layout.Column(modifier = androidx.compose.foundation.layout.Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text(if (editingTagId == null) "Nueva Etiqueta" else "Editar Etiqueta", style = MaterialTheme.typography.titleLarge)
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 
                 OutlinedTextField(
                     value = tagName,
                     onValueChange = { tagName = it },
                     label = { Text("Nombre (Ej: Robótica)") },
-                    modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth()
                 )
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = tagAliases,
                     onValueChange = { tagAliases = it },
                     label = { Text("Alias separados por coma") },
-                    modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth()
                 )
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Category selector
-                androidx.compose.foundation.layout.Box(modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth()) {
+                Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = categories.find { it.id == selectedCategoryId }?.name ?: "Global (Sin Categoría)",
                         onValueChange = { },
                         readOnly = true,
                         label = { Text("Categoría") },
-                        modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                         trailingIcon = {
-                            androidx.compose.material3.IconButton(onClick = { categoryExpanded = !categoryExpanded }) {
-                                Icon(androidx.compose.material.icons.Icons.Default.ArrowDropDown, "Seleccionar")
+                            IconButton(onClick = { categoryExpanded = !categoryExpanded }) {
+                                Icon(Icons.Default.ArrowDropDown, "Seleccionar")
                             }
                         }
                     )
-                    androidx.compose.material3.DropdownMenu(
+                    DropdownMenu(
                         expanded = categoryExpanded,
                         onDismissRequest = { categoryExpanded = false }
                     ) {
-                        androidx.compose.material3.DropdownMenuItem(
+                        DropdownMenuItem(
                             text = { Text("Global (Sin Categoría)") },
                             onClick = { 
                                 selectedCategoryId = null
@@ -73,7 +104,7 @@ fun TagsDialog(
                             }
                         )
                         categories.forEach { cat ->
-                            androidx.compose.material3.DropdownMenuItem(
+                            DropdownMenuItem(
                                 text = { Text(cat.name) },
                                 onClick = { 
                                     selectedCategoryId = cat.id
@@ -84,10 +115,10 @@ fun TagsDialog(
                     }
                 }
                 
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(16.dp))
-                androidx.compose.foundation.layout.Row(modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     if (editingTagId != null) {
-                        androidx.compose.material3.TextButton(onClick = {
+                        TextButton(onClick = {
                             editingTagId = null
                             tagName = ""
                             tagAliases = ""
@@ -96,7 +127,7 @@ fun TagsDialog(
                             Text("Cancelar Edición")
                         }
                     }
-                    androidx.compose.material3.Button(
+                    Button(
                         onClick = {
                             if (tagName.isNotBlank()) {
                                 val aliasesList = tagAliases.split(",")
@@ -118,28 +149,28 @@ fun TagsDialog(
                     }
                 }
                 
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Text("Etiquetas actuales:", style = MaterialTheme.typography.titleMedium)
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 
-                androidx.compose.foundation.lazy.LazyColumn(modifier = androidx.compose.foundation.layout.Modifier.fillMaxHeight(0.5f)) {
+                LazyColumn(modifier = Modifier.fillMaxHeight(0.5f)) {
                     items(tags, key = { it.id }) { tag ->
-                        androidx.compose.foundation.layout.Row(modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            androidx.compose.foundation.layout.Column(modifier = androidx.compose.foundation.layout.Modifier.weight(1f)) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(tag.fullName, style = MaterialTheme.typography.bodyLarge)
                                 val catName = categories.find { it.id == tag.categoryId }?.name ?: "Global"
-                                Text(catName, style = MaterialTheme.typography.bodySmall, androidx.compose.ui.graphics.Color.Gray)
+                                Text(catName, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             }
-                            androidx.compose.material3.IconButton(onClick = {
+                            IconButton(onClick = {
                                 editingTagId = tag.id
                                 tagName = tag.fullName
                                 tagAliases = tag.aliases.joinToString(", ")
                                 selectedCategoryId = tag.categoryId
                             }) {
-                                Icon(androidx.compose.material.icons.Icons.Default.Edit, contentDescription = "Editar", modifier = androidx.compose.foundation.layout.Modifier.size(20.dp))
+                                Icon(Icons.Default.Edit, contentDescription = "Editar", modifier = Modifier.size(20.dp))
                             }
-                            androidx.compose.material3.IconButton(onClick = { onDeleteTag(tag.id) }) {
-                                Icon(androidx.compose.material.icons.Icons.Default.Delete, contentDescription = "Eliminar", tint = androidx.compose.ui.graphics.Color.Red, modifier = androidx.compose.foundation.layout.Modifier.size(20.dp))
+                            IconButton(onClick = { onDeleteTag(tag.id) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color.Red, modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -147,11 +178,9 @@ fun TagsDialog(
             }
         }
     }
-}
-"""
-    final_content = parts[0] + new_dialog
-    with open(file_path, 'w', encoding='utf-8') as f:
-        f.write(final_content)
-    print("Fixed DashboardScreen")
-else:
-    print("Could not find TagsDialog")
+}"""
+content = tags_dialog_pattern.sub(new_dialog, content)
+
+with open(file_path, 'w', encoding='utf-8') as f:
+    f.write(content)
+print("Rewrote TagsDialog")
