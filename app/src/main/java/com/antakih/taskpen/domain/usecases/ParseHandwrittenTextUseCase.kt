@@ -10,11 +10,16 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
 
     private val subtaskMarkerRegex = Regex("^[-—–]\\s*(.+)")
 
+    data class Result(
+        val tasks: List<TaskEntity>,
+        val newTags: List<SubjectEntity>
+    )
+
     operator fun invoke(
         linesWithX: List<Pair<String, Float>>,
         activeCategoryId: String? = null,
         existingTags: List<SubjectEntity> = emptyList()
-    ): List<TaskEntity> {
+    ): Result {
 
         val processedLines = mutableListOf<Pair<String, Float>>()
         for ((rawLine, minX) in linesWithX) {
@@ -28,6 +33,8 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
         }
 
         val extractedTasks = mutableListOf<TaskEntity>()
+        val newTagsToSave = mutableListOf<SubjectEntity>()
+        val currentKnownTags = existingTags.toMutableList()
         var activeMainTaskX: Float? = null
         var isInsideDescription = false
 
@@ -121,7 +128,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             activeMainTaskX = minX
         }
 
-        return extractedTasks
+        return Result(tasks = extractedTasks, newTags = newTagsToSave)
     }
 
     private fun normalizeMLKitOutput(rawText: String): String {

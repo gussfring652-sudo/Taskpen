@@ -169,12 +169,14 @@ class TaskViewModel @Inject constructor(
                 if (recognizedLines.isNotEmpty()) {
                     val currentCategory = (_activeContext.value as? ViewContext.Category)?.categoryId
                     val existingTags = subjectDao.getAllSubjectsOnce()
-                    val tasks = parseHandwrittenTextUseCase(
+                    val result = parseHandwrittenTextUseCase(
                         linesWithX = recognizedLines,
                         activeCategoryId = currentCategory,
                         existingTags = existingTags
                     )
-                    onResult(tasks)
+                    // Guardar nuevas etiquetas encontradas explícitamente
+                    result.newTags.forEach { subjectDao.insertSubject(it) }
+                    onResult(result.tasks)
                 } else {
                     onResult(emptyList())
                 }
@@ -192,12 +194,14 @@ class TaskViewModel @Inject constructor(
                 val lines = text.split("\n").map { Pair(it, 0f) }
                 val currentCategory = (_activeContext.value as? ViewContext.Category)?.categoryId
                 val existingTags = subjectDao.getAllSubjectsOnce()
-                val tasks = parseHandwrittenTextUseCase(
+                val result = parseHandwrittenTextUseCase(
                     linesWithX = lines,
                     activeCategoryId = currentCategory,
                     existingTags = existingTags
                 )
-                saveTasks(tasks)
+                // Guardar nuevas etiquetas encontradas explícitamente
+                result.newTags.forEach { subjectDao.insertSubject(it) }
+                saveTasks(result.tasks)
             } catch (e: Throwable) {
                 Log.e("TaskPenML", "Error al procesar texto manual: ${e.message}", e)
             }
