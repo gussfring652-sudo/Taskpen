@@ -259,7 +259,7 @@ fun DashboardScreen(
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
-                ModalDrawerSheet(modifier = Modifier.width(300.dp)) {
+                ModalDrawerSheet(modifier = Modifier.width(300.dp).verticalScroll(rememberScrollState())) {
                     Spacer(Modifier.height(16.dp))
                     Text("Taskpen", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.headlineMedium)
                     HorizontalDivider()
