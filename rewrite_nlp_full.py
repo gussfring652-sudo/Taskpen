@@ -1,4 +1,8 @@
-package com.antakih.taskpen.domain.usecases
+﻿import os
+
+file_path = 'app/src/main/java/com/antakih/taskpen/domain/usecases/ParseHandwrittenTextUseCase.kt'
+
+full_content = """package com.antakih.taskpen.domain.usecases
 
 import android.util.Log
 import com.antakih.taskpen.data.local.entities.SubjectEntity
@@ -9,7 +13,7 @@ import javax.inject.Inject
 
 class ParseHandwrittenTextUseCase @Inject constructor() {
 
-    private val subtaskMarkerRegex = Regex("^[-—–]\\s*(.+)")
+    private val subtaskMarkerRegex = Regex("^[-—–]\\\\s*(.+)")
 
     data class Result(
         val tasks: List<TaskEntity>,
@@ -46,7 +50,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             if (workingLine.contains("*") || workingLine.contains("★")) {
                 isImportant = true
                 workingLine = workingLine.replace("*", "").replace("★", "").trim()
-                workingLine = workingLine.replace(Regex("\\s{2,}"), " ")
+                workingLine = workingLine.replace(Regex("\\\\s{2,}"), " ")
             }
 
             if (isInsideDescription) {
@@ -106,7 +110,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
                 continue
             }
 
-            var extractedTitle = workingLine.replace(Regex("[,\\-:]$"), "").trim()
+            var extractedTitle = workingLine.replace(Regex("[,\\\\-:]$"), "").trim()
 
             // 0. Parse Date and Time
             val (textAfterDate, parsedDate) = extractDate(extractedTitle)
@@ -145,7 +149,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             var tagId: String? = null
             
             // 1. Buscar explícitamente #etiqueta o [etiqueta]
-            val explicitMatch = Regex("(#|\\[)([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)(\\])?").find(extractedTitle)
+            val explicitMatch = Regex("(#|\\\\[)([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)(\\\\])?").find(extractedTitle)
             if (explicitMatch != null) {
                 val originalWord = explicitMatch.groupValues[2].trim()
                 val foundWord = originalWord.lowercase()
@@ -171,7 +175,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             
             // 2. Buscar por contexto al final (para X, de X) SOLO en etiquetas existentes
             if (tagId == null) {
-                val contextMatch = Regex("(?i)\\s+(para|de)\\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\s*$").find(extractedTitle)
+                val contextMatch = Regex("(?i)\\\\s+(para|de)\\\\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\\\s*$").find(extractedTitle)
                 if (contextMatch != null) {
                     val foundWord = contextMatch.groupValues[2].trim().lowercase()
                     val matchedTag = currentKnownTags.find { it.fullName.lowercase() == foundWord || it.aliases.contains(foundWord) }
@@ -209,12 +213,12 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
     }
 
     private fun normalizeMLKitOutput(rawText: String): String {
-        return rawText.replace(Regex("(?<=\\s|\\d)([-—–*★xX])"), "\n$1").trim()
+        return rawText.replace(Regex("(?<=\\\\s|\\\\d)([-—–*★xX])"), "\\n$1").trim()
     }
 
     private fun cleanDanglingWords(text: String): String {
         var clean = text.trim()
-        val danglingRegex = Regex("(?i)\\s+(de|en|para|el|la|los|las|a|un|una|del|al|sobre)$")
+        val danglingRegex = Regex("(?i)\\\\s+(de|en|para|el|la|los|las|a|un|una|del|al|sobre)$")
         while (danglingRegex.containsMatchIn(clean)) {
             clean = clean.replace(danglingRegex, "").trim()
         }
@@ -257,7 +261,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
         var cal: Calendar? = null
         val now = Calendar.getInstance()
 
-        val dateSlashRegex = Regex("(?i)\\b(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?\\b")
+        val dateSlashRegex = Regex("(?i)\\\\b(\\\\d{1,2})/(\\\\d{1,2})(?:/(\\\\d{2,4}))?\\\\b")
         dateSlashRegex.find(cleanedText)?.let { match ->
             cal = Calendar.getInstance()
             val day = match.groupValues[1].toInt()
@@ -273,7 +277,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             return Pair(cleanedText.trim(), cal)
         }
 
-        val dateTextRegex = Regex("(?i)\\b(\\d{1,2})\\s+de\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\\s+de\\s+(\\d{2,4}))?\\b")
+        val dateTextRegex = Regex("(?i)\\\\b(\\\\d{1,2})\\\\s+de\\\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\\\\s+de\\\\s+(\\\\d{2,4}))?\\\\b")
         dateTextRegex.find(cleanedText)?.let { match ->
             cal = Calendar.getInstance()
             val day = match.groupValues[1].toInt()
@@ -289,7 +293,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             return Pair(cleanedText.trim(), cal)
         }
 
-        val dateTomorrowRegex = Regex("(?i)\\b(?:para\\s+)?mañana\\b")
+        val dateTomorrowRegex = Regex("(?i)\\\\b(?:para\\\\s+)?mañana\\\\b")
         dateTomorrowRegex.find(cleanedText)?.let { match ->
             cal = Calendar.getInstance()
             cal?.add(Calendar.DAY_OF_YEAR, 1)
@@ -297,7 +301,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             return Pair(cleanedText.trim(), cal)
         }
 
-        val dateWeekdayRegex = Regex("(?i)\\b(?:para el|próximo|proximo|el|para|este)\\s+(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\\b")
+        val dateWeekdayRegex = Regex("(?i)\\\\b(?:para el|próximo|proximo|el|para|este)\\\\s+(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\\\\b")
         dateWeekdayRegex.find(cleanedText)?.let { match ->
             cal = Calendar.getInstance()
             val targetDay = getDayOfWeek(match.groupValues[1])
@@ -309,7 +313,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             return Pair(cleanedText.trim(), cal)
         }
 
-        val dateInXDaysRegex = Regex("(?i)\\ben\\s+(\\d+)\\s+días?\\b")
+        val dateInXDaysRegex = Regex("(?i)\\\\ben\\\\s+(\\\\d+)\\\\s+días?\\\\b")
         dateInXDaysRegex.find(cleanedText)?.let { match ->
             cal = Calendar.getInstance()
             val days = match.groupValues[1].toInt()
@@ -325,7 +329,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
         var cleanedText = text
         var timePair: Pair<Int, Int>? = null
 
-        val timeInXHoursRegex = Regex("(?i)\\ben\\s+(\\d+)\\s+horas?\\b")
+        val timeInXHoursRegex = Regex("(?i)\\\\ben\\\\s+(\\\\d+)\\\\s+horas?\\\\b")
         timeInXHoursRegex.find(cleanedText)?.let { match ->
             val now = Calendar.getInstance()
             val hours = match.groupValues[1].toInt()
@@ -335,7 +339,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             return Pair(cleanedText.trim(), timePair)
         }
 
-        val timeColonRegex = Regex("(?i)\\b(?:a las\\s+)?(\\d{1,2}):(\\d{2})(?:\\s*(am|pm|a\\.m\\.|p\\.m\\.|hrs|horas))?\\b")
+        val timeColonRegex = Regex("(?i)\\\\b(?:a las\\\\s+)?(\\\\d{1,2}):(\\\\d{2})(?:\\\\s*(am|pm|a\\\\.m\\\\.|p\\\\.m\\\\.|hrs|horas))?\\\\b")
         timeColonRegex.find(cleanedText)?.let { match ->
             var hour = match.groupValues[1].toInt()
             val minute = match.groupValues[2].toInt()
@@ -347,7 +351,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             return Pair(cleanedText.trim(), timePair)
         }
 
-        val timeLiteralRegex = Regex("(?i)\\b(?:a las\\s+)?(\\d{1,2})\\s*(am|pm|a\\.m\\.|p\\.m\\.)\\b")
+        val timeLiteralRegex = Regex("(?i)\\\\b(?:a las\\\\s+)?(\\\\d{1,2})\\\\s*(am|pm|a\\\\.m\\\\.|p\\\\.m\\\\.)\\\\b")
         timeLiteralRegex.find(cleanedText)?.let { match ->
             var hour = match.groupValues[1].toInt()
             val ampm = match.groupValues[2].lowercase().replace(".", "")
@@ -361,3 +365,8 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
         return Pair(cleanedText, null)
     }
 }
+"""
+
+with open(file_path, 'w', encoding='utf-8') as f:
+    f.write(full_content)
+print("Wrote ParseHandwrittenTextUseCase entirely.")
