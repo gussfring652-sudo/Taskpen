@@ -169,9 +169,9 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
                 extractedTitle = extractedTitle.replace(explicitMatch.value, "").trim()
             }
             
-            // 2. Buscar por contexto al final (para X, de X) SOLO en etiquetas existentes
+            // 2. Buscar por contexto al final (para X, de X, en X) SOLO en etiquetas existentes
             if (tagId == null) {
-                val contextMatch = Regex("(?i)\\s+(para|de)\\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\s*$").find(extractedTitle)
+                val contextMatch = Regex("(?i)\\s+(para|para la|para el|de|de la|del|en|en la|en el)\\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\s*$").find(extractedTitle)
                 if (contextMatch != null) {
                     val foundWord = contextMatch.groupValues[2].trim().lowercase()
                     val matchedTag = currentKnownTags.find { it.fullName.lowercase() == foundWord || it.aliases.contains(foundWord) }
