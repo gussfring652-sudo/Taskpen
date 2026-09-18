@@ -51,8 +51,7 @@ import com.antakih.taskpen.ui.viewmodel.ViewContext
 sealed class MainPaneState {
     object TaskList : MainPaneState()
     data class TaskDetail(val task: com.antakih.taskpen.data.local.entities.TaskEntity) : MainPaneState()
-    object Settings : MainPaneState()
-}
+    }
 
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -76,6 +75,7 @@ fun DashboardScreen(
     var showAllCategoriesSheet by remember { mutableStateOf(false) }
     var showFilterDialog by remember { mutableStateOf(false) }
     var showTagsDialog by remember { mutableStateOf(false) }
+    var showSettingsFullScreen by remember { androidx.compose.runtime.mutableStateOf(false) }
     var mainPaneState by remember { mutableStateOf<MainPaneState>(MainPaneState.TaskList) }
     var quickViewTask by remember { mutableStateOf<com.antakih.taskpen.data.local.entities.TaskEntity?>(null) }
     var textInputValue by remember { mutableStateOf("") }
@@ -144,39 +144,7 @@ fun DashboardScreen(
                     onBack = { mainPaneState = MainPaneState.TaskList }
                 )
             }
-            is MainPaneState.Settings -> {
-                val isCaseSensitive by viewModel.isCaseSensitiveTags.collectAsState()
-                Scaffold(
-                    topBar = {
-                        TopAppBar(
-                            title = { Text("Ajustes") },
-                            navigationIcon = {
-                                IconButton(onClick = { mainPaneState = MainPaneState.TaskList }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                                }
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                        )
-                    }
-                ) { padding ->
-                    Column(modifier = Modifier.padding(padding).padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Sensibilidad a mayúsculas", style = MaterialTheme.typography.bodyLarge)
-                                Text("Requiere coincidencia exacta de mayúsculas y minúsculas en las etiquetas.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                            }
-                            androidx.compose.material3.Switch(
-                                checked = isCaseSensitive,
-                                onCheckedChange = { viewModel.setCaseSensitiveTags(it) }
-                            )
-                        }
-                    }
-                }
-            }
+
             is MainPaneState.TaskList -> {
         Scaffold(
             topBar = {
@@ -345,7 +313,7 @@ fun DashboardScreen(
                 onFilterClick = { showFilterDialog = true },
                 onTagsClick = { showTagsDialog = true },
                 onToggleImportantFilter = { viewModel.updateFilterState(filterState.copy(showOnlyImportant = !filterState.showOnlyImportant)) },
-                onSettingsClick = { mainPaneState = MainPaneState.Settings },
+                onSettingsClick = { showSettingsFullScreen = true },
                 onCategoryClick = { 
                     if ((activeContext as? ViewContext.Category)?.categoryId == it) viewModel.setContext(ViewContext.General) 
                     else viewModel.setContext(ViewContext.Category(it)) 
@@ -421,6 +389,12 @@ fun DashboardScreen(
                         label = { Text("Papelera") },
                         selected = activeContext is ViewContext.Trash,
                         onClick = { viewModel.setContext(ViewContext.Trash); scope.launch { drawerState.close() } }
+                    )
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                        label = { Text("Ajustes") },
+                        selected = false,
+                        onClick = { showSettingsFullScreen = true; scope.launch { drawerState.close() } }
                     )
                 }
             }
@@ -535,8 +509,7 @@ fun TaskCard(
     val assignedTag = tags.find { it.id == task.subcategoryId }
 
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -1147,6 +1120,10 @@ fun LeftLandscapePanel(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MenuButton("Completadas", activeContext is ViewContext.Completed, { onContextSelected(ViewContext.Completed) }, Modifier.weight(1f))
             MenuButton("Papelera", activeContext is ViewContext.Trash, { onContextSelected(ViewContext.Trash) }, Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MenuButton("Ajustes", false, { onSettingsClick() }, Modifier.weight(1f))
         }
         
         Spacer(Modifier.height(32.dp))

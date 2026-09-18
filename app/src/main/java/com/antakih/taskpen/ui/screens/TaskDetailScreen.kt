@@ -275,10 +275,11 @@ fun EditTaskDialog(
     var selectedTagId by remember { mutableStateOf(task.subcategoryId) }
 
     var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
     var tagExpanded by remember { mutableStateOf(false) }
 
-    val dateString = dueDateMillis?.let { java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(it)) } ?: "Sin fecha"
+    val dateString = dueDateMillis?.let { java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(it)) } ?: "Sin fecha y hora"
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -405,7 +406,8 @@ fun EditTaskDialog(
                 TextButton(onClick = {
                     dueDateMillis = datePickerState.selectedDateMillis
                     showDatePicker = false
-                }) { Text("Aceptar") }
+                    showTimePicker = true // Automatically open time picker after date
+                }) { Text("Siguiente") }
             },
             dismissButton = {
                 TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
@@ -413,5 +415,33 @@ fun EditTaskDialog(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    if (showTimePicker) {
+        val cal = java.util.Calendar.getInstance()
+        if (dueDateMillis != null) {
+            cal.timeInMillis = dueDateMillis!!
+        }
+        val timePickerState = androidx.compose.material3.rememberTimePickerState(
+            initialHour = cal.get(java.util.Calendar.HOUR_OF_DAY),
+            initialMinute = cal.get(java.util.Calendar.MINUTE)
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    cal.set(java.util.Calendar.HOUR_OF_DAY, timePickerState.hour)
+                    cal.set(java.util.Calendar.MINUTE, timePickerState.minute)
+                    dueDateMillis = cal.timeInMillis
+                    showTimePicker = false
+                }) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("Cancelar") }
+            },
+            text = {
+                androidx.compose.material3.TimePicker(state = timePickerState)
+            }
+        )
     }
 }
