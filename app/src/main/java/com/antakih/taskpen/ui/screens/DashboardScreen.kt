@@ -1,5 +1,11 @@
 package com.antakih.taskpen.ui.screens
 
+import kotlinx.coroutines.launch
+import com.antakih.taskpen.ui.screens.TaskDetailScreen
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -41,9 +47,15 @@ import com.antakih.taskpen.data.local.entities.CategoryEntity
 import com.antakih.taskpen.data.local.entities.TaskEntity
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
 import com.antakih.taskpen.ui.viewmodel.ViewContext
-import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+sealed class MainPaneState {
+    object TaskList : MainPaneState()
+    data class TaskDetail(val task: com.antakih.taskpen.data.local.entities.TaskEntity) : MainPaneState()
+    object Settings : MainPaneState()
+}
+
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     viewModel: TaskViewModel,
@@ -64,7 +76,8 @@ fun DashboardScreen(
     var showAllCategoriesSheet by remember { mutableStateOf(false) }
     var showFilterDialog by remember { mutableStateOf(false) }
     var showTagsDialog by remember { mutableStateOf(false) }
-    var showSettingsDialog by remember { mutableStateOf(false) }
+    var mainPaneState by remember { mutableStateOf<MainPaneState>(MainPaneState.TaskList) }
+    var quickViewTask by remember { mutableStateOf<com.antakih.taskpen.data.local.entities.TaskEntity?>(null) }
     var textInputValue by remember { mutableStateOf("") }
     
     var showDrawingSheet by remember { mutableStateOf(false) }
@@ -123,6 +136,48 @@ fun DashboardScreen(
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE || configuration.screenWidthDp >= 840
 
     val mainContent = @Composable {
+        when (val state = mainPaneState) {
+            is MainPaneState.TaskDetail -> {
+                TaskDetailScreen(
+                    task = state.task,
+                    viewModel = viewModel,
+                    onBack = { mainPaneState = MainPaneState.TaskList }
+                )
+            }
+            is MainPaneState.Settings -> {
+                val isCaseSensitive by viewModel.isCaseSensitiveTags.collectAsState()
+                Scaffold(
+                    topBar = {
+                        TopAppBar(
+                            title = { Text("Ajustes") },
+                            navigationIcon = {
+                                IconButton(onClick = { mainPaneState = MainPaneState.TaskList }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        )
+                    }
+                ) { padding ->
+                    Column(modifier = Modifier.padding(padding).padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Sensibilidad a mayúsculas", style = MaterialTheme.typography.bodyLarge)
+                                Text("Requiere coincidencia exacta de mayúsculas y minúsculas en las etiquetas.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            }
+                            androidx.compose.material3.Switch(
+                                checked = isCaseSensitive,
+                                onCheckedChange = { viewModel.setCaseSensitiveTags(it) }
+                            )
+                        }
+                    }
+                }
+            }
+            is MainPaneState.TaskList -> {
         Scaffold(
             topBar = {
                 if (!isLandscape) {
@@ -246,7 +301,8 @@ fun DashboardScreen(
                                         onMoveToTrash = { viewModel.moveToTrash(task.id) },
                                         onRestore = { viewModel.restoreTask(task.id) },
                                         onDeletePermanently = { viewModel.permanentlyDeleteTask(task.id) },
-                                        onClick = { onTaskClick(task) }
+                                        onClick = { mainPaneState = MainPaneState.TaskDetail(task) },
+                                        onLongClick = { quickViewTask = task }
                                     )
                                     Spacer(Modifier.height(8.dp))
                                 }
@@ -264,13 +320,16 @@ fun DashboardScreen(
                                     onMoveToTrash = { viewModel.moveToTrash(task.id) },
                                     onRestore = { viewModel.restoreTask(task.id) },
                                     onDeletePermanently = { viewModel.permanentlyDeleteTask(task.id) },
-                                    onClick = { onTaskClick(task) }
+                                    onClick = { mainPaneState = MainPaneState.TaskDetail(task) },
+                                        onLongClick = { quickViewTask = task }
                                 )
                                 Spacer(Modifier.height(8.dp))
                             }
                         }
                     }
                 }
+            }
+        }
             }
         }
     }
@@ -286,7 +345,7 @@ fun DashboardScreen(
                 onFilterClick = { showFilterDialog = true },
                 onTagsClick = { showTagsDialog = true },
                 onToggleImportantFilter = { viewModel.updateFilterState(filterState.copy(showOnlyImportant = !filterState.showOnlyImportant)) },
-                onSettingsClick = { showSettingsDialog = true },
+                onSettingsClick = { mainPaneState = MainPaneState.Settings },
                 onCategoryClick = { 
                     if ((activeContext as? ViewContext.Category)?.categoryId == it) viewModel.setContext(ViewContext.General) 
                     else viewModel.setContext(ViewContext.Category(it)) 
@@ -386,43 +445,6 @@ fun DashboardScreen(
     }
 
     
-    if (showSettingsDialog) {
-        val isCaseSensitive by viewModel.isCaseSensitiveTags.collectAsState()
-        androidx.compose.ui.window.Dialog(onDismissRequest = { showSettingsDialog = false }) {
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                shape = MaterialTheme.shapes.large
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Ajustes", style = MaterialTheme.typography.titleLarge)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Sensibilidad a mayúsculas", style = MaterialTheme.typography.bodyLarge)
-                            Text("Requiere coincidencia exacta de mayúsculas y minúsculas en las etiquetas.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        }
-                        Switch(
-                            checked = isCaseSensitive,
-                            onCheckedChange = { viewModel.setCaseSensitiveTags(it) }
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { showSettingsDialog = false }) {
-                            Text("Cerrar")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     if (showFilterDialog) {
         FilterDialog(
             tags = allTags,
@@ -451,6 +473,9 @@ fun DashboardScreen(
         )
     }
 
+    quickViewTask?.let {
+        QuickViewDialog(task = it, viewModel = viewModel, onDismiss = { quickViewTask = null }, onEditClick = { mainPaneState = MainPaneState.TaskDetail(it) })
+    }
     if (showDrawingSheet) {
         ModalBottomSheet(onDismissRequest = { showDrawingSheet = false }, modifier = Modifier.fillMaxHeight(0.6f)) {
             DrawingScreen(viewModel = viewModel, onFinished = { showDrawingSheet = false })
@@ -484,6 +509,7 @@ fun DashboardScreen(
         )
     }
 }
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TaskCard(
     task: TaskEntity,
@@ -496,7 +522,8 @@ fun TaskCard(
     onMoveToTrash: () -> Unit = {},
     onRestore: () -> Unit = {},
     onDeletePermanently: () -> Unit = {},
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    onLongClick: () -> Unit = {}
 ) {
     val dateFormat = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
     val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
@@ -816,7 +843,7 @@ fun FilterDialog(
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ManualTaskSheet(
     allCategories: List<CategoryEntity>,
@@ -988,7 +1015,7 @@ fun ManualTaskSheet(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AllCategoriesSheet(
     allCategories: List<CategoryEntity>,
@@ -1146,6 +1173,59 @@ fun LeftLandscapePanel(
                     Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text(cat.name, color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun QuickViewDialog(
+    task: com.antakih.taskpen.data.local.entities.TaskEntity,
+    viewModel: TaskViewModel,
+    onDismiss: () -> Unit,
+    onEditClick: () -> Unit
+) {
+    val subtasks by viewModel.getSubtasks(task.id).collectAsState(initial = emptyList())
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(task.title, style = MaterialTheme.typography.titleLarge)
+                if (!task.description.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(task.description, style = MaterialTheme.typography.bodyMedium)
+                }
+                
+                if (subtasks.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Subtareas:", style = MaterialTheme.typography.titleMedium)
+                    LazyColumn(modifier = Modifier.fillMaxHeight(0.4f)) {
+                        items(subtasks, key = { it.id }) { subtask ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = subtask.isCompleted,
+                                    onCheckedChange = { 
+                                        if (it) viewModel.completeTask(subtask.id) else viewModel.uncompleteTask(subtask.id)
+                                    }
+                                )
+                                Text(subtask.title, style = if (subtask.isCompleted) androidx.compose.ui.text.TextStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough) else androidx.compose.ui.text.TextStyle.Default)
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cerrar")
+                    }
+                    Button(onClick = { onEditClick(); onDismiss() }) {
+                        Text("Ver Detalle / Editar")
                     }
                 }
             }

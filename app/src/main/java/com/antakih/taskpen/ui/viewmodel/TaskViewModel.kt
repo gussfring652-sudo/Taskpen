@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -267,6 +268,16 @@ class TaskViewModel @Inject constructor(
         viewModelScope.launch {
             try { taskDao.permanentlyDeleteTask(taskId) }
             catch (e: Throwable) { Log.e("TaskPenML", "Error al eliminar tarea: ${e.message}", e) }
+        }
+    }
+
+    fun updateTaskDetails(id: String, title: String, description: String?, dueDate: Long?, categoryId: String?, subcategoryId: String?) {
+        viewModelScope.launch {
+            val allTasks = taskDao.getAllActiveTasks().first()
+            val task = allTasks.find { it.id == id }
+            if (task != null) {
+                taskDao.insertTask(task.copy(title = title, description = description, dueDate = dueDate, categoryId = categoryId, subcategoryId = subcategoryId))
+            }
         }
     }
 
