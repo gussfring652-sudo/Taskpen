@@ -251,12 +251,12 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                     } ?: 0f
 
                     val inkBuilder = Ink.builder()
-                    // Ordenamos los trazos cronológicamente (como los dibujó el usuario)
-                    // Esto es VITAL para que ML Kit entienda la escritura
-                    val sortedByTime = lineStrokes.sortedBy { stroke ->
-                        stroke.points.firstOrNull()?.timestamp ?: 0L
+                    // Ordenamos los trazos espacialmente (de izquierda a derecha)
+                    // Esto arregla el problema de cuando el usuario borra una palabra y la vuelve a escribir al principio
+                    val sortedByX = lineStrokes.sortedBy { stroke ->
+                        stroke.points.minOfOrNull { it.position.x } ?: Float.MAX_VALUE
                     }
-                    sortedByTime.forEach { stroke ->
+                    sortedByX.forEach { stroke ->
                         val strokeBuilder = Ink.Stroke.builder()
                         stroke.points.forEach { point ->
                             strokeBuilder.addPoint(Ink.Point.create(point.position.x, point.position.y, point.timestamp))

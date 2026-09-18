@@ -4,154 +4,73 @@ file_path = 'app/src/main/java/com/antakih/taskpen/ui/screens/DashboardScreen.kt
 with open(file_path, 'r', encoding='utf-8') as f:
     content = f.read()
 
-# Split before the FIRST occurrence of @Composable fun TagsDialog
-parts = content.split("@Composable\nfun TagsDialog(")
-if len(parts) > 1:
-    new_dialog = """@Composable
-fun TagsDialog(
-    tags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
-    categories: List<com.antakih.taskpen.data.local.entities.CategoryEntity>,
-    currentCategoryId: String?,
-    onDismiss: () -> Unit,
-    onAddTag: (categoryId: String?, name: String, aliases: List<String>) -> Unit,
-    onUpdateTag: (id: String, categoryId: String?, name: String, aliases: List<String>) -> Unit,
-    onDeleteTag: (id: String) -> Unit
-) {
-    var editingTagId by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-    var tagName by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-    var tagAliases by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-    var selectedCategoryId by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(currentCategoryId) }
-    var categoryExpanded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        androidx.compose.material3.Card(
-            modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth().padding(16.dp),
-            shape = MaterialTheme.shapes.large
-        ) {
-            androidx.compose.foundation.layout.Column(modifier = androidx.compose.foundation.layout.Modifier.padding(16.dp)) {
-                Text(if (editingTagId == null) "Nueva Etiqueta" else "Editar Etiqueta", style = MaterialTheme.typography.titleLarge)
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(16.dp))
-                
-                OutlinedTextField(
-                    value = tagName,
-                    onValueChange = { tagName = it },
-                    label = { Text("Nombre (Ej: Robótica)") },
-                    modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth()
-                )
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = tagAliases,
-                    onValueChange = { tagAliases = it },
-                    label = { Text("Alias separados por coma") },
-                    modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth()
-                )
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(8.dp))
-
-                // Category selector
-                androidx.compose.foundation.layout.Box(modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = categories.find { it.id == selectedCategoryId }?.name ?: "Global (Sin Categoría)",
-                        onValueChange = { },
-                        readOnly = true,
-                        label = { Text("Categoría") },
-                        modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth(),
-                        trailingIcon = {
-                            androidx.compose.material3.IconButton(onClick = { categoryExpanded = !categoryExpanded }) {
-                                Icon(androidx.compose.material.icons.Icons.Default.ArrowDropDown, "Seleccionar")
-                            }
-                        }
-                    )
-                    androidx.compose.material3.DropdownMenu(
-                        expanded = categoryExpanded,
-                        onDismissRequest = { categoryExpanded = false }
-                    ) {
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("Global (Sin Categoría)") },
-                            onClick = { 
-                                selectedCategoryId = null
-                                categoryExpanded = false 
-                            }
-                        )
-                        categories.forEach { cat ->
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = { Text(cat.name) },
-                                onClick = { 
-                                    selectedCategoryId = cat.id
-                                    categoryExpanded = false 
-                                }
-                            )
-                        }
-                    }
-                }
-                
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(16.dp))
-                androidx.compose.foundation.layout.Row(modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
-                    if (editingTagId != null) {
-                        androidx.compose.material3.TextButton(onClick = {
-                            editingTagId = null
-                            tagName = ""
-                            tagAliases = ""
-                            selectedCategoryId = currentCategoryId
-                        }) {
-                            Text("Cancelar Edición")
-                        }
-                    }
-                    androidx.compose.material3.Button(
-                        onClick = {
-                            if (tagName.isNotBlank()) {
-                                val aliasesList = tagAliases.split(",")
-                                    .map { it.trim().lowercase() }
-                                    .filter { it.isNotEmpty() }
-                                if (editingTagId == null) {
-                                    onAddTag(selectedCategoryId, tagName.trim(), aliasesList)
-                                } else {
-                                    onUpdateTag(editingTagId!!, selectedCategoryId, tagName.trim(), aliasesList)
-                                    editingTagId = null
-                                }
-                                tagName = ""
-                                tagAliases = ""
-                                selectedCategoryId = currentCategoryId
-                            }
-                        }
-                    ) {
-                        Text(if (editingTagId == null) "Añadir" else "Guardar")
-                    }
-                }
-                
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(16.dp))
-                Text("Etiquetas actuales:", style = MaterialTheme.typography.titleMedium)
-                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.foundation.layout.Modifier.height(8.dp))
-                
-                androidx.compose.foundation.lazy.LazyColumn(modifier = androidx.compose.foundation.layout.Modifier.fillMaxHeight(0.5f)) {
-                    items(tags, key = { it.id }) { tag ->
-                        androidx.compose.foundation.layout.Row(modifier = androidx.compose.foundation.layout.Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            androidx.compose.foundation.layout.Column(modifier = androidx.compose.foundation.layout.Modifier.weight(1f)) {
-                                Text(tag.fullName, style = MaterialTheme.typography.bodyLarge)
-                                val catName = categories.find { it.id == tag.categoryId }?.name ?: "Global"
-                                Text(catName, style = MaterialTheme.typography.bodySmall, androidx.compose.ui.graphics.Color.Gray)
-                            }
-                            androidx.compose.material3.IconButton(onClick = {
-                                editingTagId = tag.id
-                                tagName = tag.fullName
-                                tagAliases = tag.aliases.joinToString(", ")
-                                selectedCategoryId = tag.categoryId
-                            }) {
-                                Icon(androidx.compose.material.icons.Icons.Default.Edit, contentDescription = "Editar", modifier = androidx.compose.foundation.layout.Modifier.size(20.dp))
-                            }
-                            androidx.compose.material3.IconButton(onClick = { onDeleteTag(tag.id) }) {
-                                Icon(androidx.compose.material.icons.Icons.Default.Delete, contentDescription = "Eliminar", tint = androidx.compose.ui.graphics.Color.Red, modifier = androidx.compose.foundation.layout.Modifier.size(20.dp))
-                            }
-                        }
-                    }
-                }
-            }
+# Fix the baseTasks.filter logic
+old_block = """        baseTasks.filter { task ->
+            val matchesSearch = if (filterState.searchQuery.isNotBlank()) {
+                task.title.contains(filterState.searchQuery, ignoreCase = true) ||
+                task.description?.contains(filterState.searchQuery, ignoreCase = true) == true
+            } else true
+            
+            val matchesImportant = if (filterState.showOnlyImportant) task.isImportant else true
+            val matchesCategory = if (filterState.selectedCategories.isNotEmpty()) filterState.selectedCategories.contains(task.categoryId) else true
+            val matchesTags = if (filterState.selectedTags.isNotEmpty()) filterState.selectedTags.contains(task.subcategoryId) else true
+            
+            matchesSearch && matchesImportant && matchesCategory && matchesTags
         }
-    }
-}
-"""
-    final_content = parts[0] + new_dialog
-    with open(file_path, 'w', encoding='utf-8') as f:
-        f.write(final_content)
-    print("Fixed DashboardScreen")
-else:
-    print("Could not find TagsDialog")
+        
+        if (filterState.sortByDueDate) {
+            filtered.sortedWith(compareBy(nullsLast()) { it.dueDate })
+        } else {
+            filtered.sortedByDescending { it.createdAt }
+        }
+    }"""
+
+new_block = """        val filtered = baseTasks.filter { task ->
+            val matchesSearch = if (filterState.searchQuery.isNotBlank()) {
+                task.title.contains(filterState.searchQuery, ignoreCase = true) ||
+                task.description?.contains(filterState.searchQuery, ignoreCase = true) == true
+            } else true
+            
+            val matchesImportant = if (filterState.showOnlyImportant) task.isImportant else true
+            val matchesCategory = if (filterState.selectedCategories.isNotEmpty()) filterState.selectedCategories.contains(task.categoryId) else true
+            val matchesTags = if (filterState.selectedTags.isNotEmpty()) filterState.selectedTags.contains(task.subcategoryId) else true
+            
+            matchesSearch && matchesImportant && matchesCategory && matchesTags
+        }
+        
+        if (filterState.sortByDueDate) {
+            filtered.sortedWith(compareBy(nullsLast()) { it.dueDate })
+        } else {
+            filtered.sortedByDescending { it.createdAt }
+        }
+    }"""
+
+content = content.replace(old_block, new_block)
+
+# Fix FilterState initialization in FilterDialog:
+content = content.replace(
+    """onApply(
+                            currentState.copy(
+                                sortByDueDate = sortByDueDate,
+                                selectedTags = selectedTagIds,
+                                showOnlyImportant = showOnlyImportant
+                            )
+                        )""",
+    """onApply(
+                            currentState.copy(
+                                sortByDueDate = sortByDueDate,
+                                selectedTags = selectedTagIds,
+                                showOnlyImportant = showOnlyImportant
+                            )
+                        )"""
+)
+
+# And fix line 805 No parameter with name 'selectedTagIds' found.
+# Ah, I replaced the FilterState instantiation but there was another one!
+# Let me look for selectedTagIds in FilterState creation
+content = re.sub(r'selectedTagIds = selectedTagIds', r'selectedTags = selectedTagIds', content)
+content = content.replace('selectedTags = selectedTags', 'selectedTags = selectedTagIds') # in case of double replacement
+
+with open(file_path, 'w', encoding='utf-8') as f:
+    f.write(content)
+print("Fixed DashboardScreen compilation issues")

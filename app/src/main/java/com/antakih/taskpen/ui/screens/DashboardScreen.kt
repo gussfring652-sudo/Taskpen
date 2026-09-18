@@ -64,6 +64,7 @@ fun DashboardScreen(
     var showAllCategoriesSheet by remember { mutableStateOf(false) }
     var showFilterDialog by remember { mutableStateOf(false) }
     var showTagsDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
     var textInputValue by remember { mutableStateOf("") }
     
     var showDrawingSheet by remember { mutableStateOf(false) }
@@ -87,7 +88,7 @@ fun DashboardScreen(
             }
         }
         
-        baseTasks.filter { task ->
+        val filtered = baseTasks.filter { task ->
             val matchesSearch = if (filterState.searchQuery.isNotBlank()) {
                 task.title.contains(filterState.searchQuery, ignoreCase = true) ||
                 task.description?.contains(filterState.searchQuery, ignoreCase = true) == true
@@ -98,6 +99,12 @@ fun DashboardScreen(
             val matchesTags = if (filterState.selectedTags.isNotEmpty()) filterState.selectedTags.contains(task.subcategoryId) else true
             
             matchesSearch && matchesImportant && matchesCategory && matchesTags
+        }
+        
+        if (filterState.sortByDueDate) {
+            filtered.sortedBy { it.dueDate ?: Long.MAX_VALUE }
+        } else {
+            filtered.sortedByDescending { it.createdAt }
         }
     }
 
@@ -211,21 +218,56 @@ fun DashboardScreen(
                     }
                 } else {
                     LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
-                        items(displayedTasks, key = { it.id }) { task ->
-                            TaskCard(
-                                task = task,
-                                tags = allTags,
-                                isTrashContext = activeContext is ViewContext.Trash,
-                                isCompletedContext = activeContext is ViewContext.Completed,
-                                onComplete = { viewModel.completeTask(task.id) },
-                                onUncomplete = { viewModel.uncompleteTask(task.id) },
-                                onToggleImportant = { viewModel.toggleTaskImportance(task.id, !task.isImportant) },
-                                onMoveToTrash = { viewModel.moveToTrash(task.id) },
-                                onRestore = { viewModel.restoreTask(task.id) },
-                                onDeletePermanently = { viewModel.permanentlyDeleteTask(task.id) },
-                                onClick = { onTaskClick(task) }
-                            )
-                            Spacer(Modifier.height(8.dp))
+                        if (filterState.sortByDueDate) {
+                            val grouped = displayedTasks.groupBy { task ->
+                                if (task.dueDate == null) "Sin Fecha"
+                                else if (android.text.format.DateUtils.isToday(task.dueDate)) "Hoy"
+                                else if (android.text.format.DateUtils.isToday(task.dueDate - 86400000)) "Mañana"
+                                else android.text.format.DateFormat.format("dd MMM yyyy", task.dueDate).toString()
+                            }
+                            grouped.forEach { (header, tasksInGroup) ->
+                                item {
+                                    Text(
+                                        text = header,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                }
+                                items(tasksInGroup, key = { it.id }) { task ->
+                                    TaskCard(
+                                        task = task,
+                                        tags = allTags,
+                                        isTrashContext = activeContext is ViewContext.Trash,
+                                        isCompletedContext = activeContext is ViewContext.Completed,
+                                        onComplete = { viewModel.completeTask(task.id) },
+                                        onUncomplete = { viewModel.uncompleteTask(task.id) },
+                                        onToggleImportant = { viewModel.toggleTaskImportance(task.id, !task.isImportant) },
+                                        onMoveToTrash = { viewModel.moveToTrash(task.id) },
+                                        onRestore = { viewModel.restoreTask(task.id) },
+                                        onDeletePermanently = { viewModel.permanentlyDeleteTask(task.id) },
+                                        onClick = { onTaskClick(task) }
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                }
+                            }
+                        } else {
+                            items(displayedTasks, key = { it.id }) { task ->
+                                TaskCard(
+                                    task = task,
+                                    tags = allTags,
+                                    isTrashContext = activeContext is ViewContext.Trash,
+                                    isCompletedContext = activeContext is ViewContext.Completed,
+                                    onComplete = { viewModel.completeTask(task.id) },
+                                    onUncomplete = { viewModel.uncompleteTask(task.id) },
+                                    onToggleImportant = { viewModel.toggleTaskImportance(task.id, !task.isImportant) },
+                                    onMoveToTrash = { viewModel.moveToTrash(task.id) },
+                                    onRestore = { viewModel.restoreTask(task.id) },
+                                    onDeletePermanently = { viewModel.permanentlyDeleteTask(task.id) },
+                                    onClick = { onTaskClick(task) }
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
                         }
                     }
                 }
@@ -244,7 +286,7 @@ fun DashboardScreen(
                 onFilterClick = { showFilterDialog = true },
                 onTagsClick = { showTagsDialog = true },
                 onToggleImportantFilter = { viewModel.updateFilterState(filterState.copy(showOnlyImportant = !filterState.showOnlyImportant)) },
-                onSettingsClick = { /* TODO: Ajustes */ },
+                onSettingsClick = { showSettingsDialog = true },
                 onCategoryClick = { 
                     if ((activeContext as? ViewContext.Category)?.categoryId == it) viewModel.setContext(ViewContext.General) 
                     else viewModel.setContext(ViewContext.Category(it)) 
@@ -341,6 +383,44 @@ fun DashboardScreen(
                 viewModel.createCategory(name, color) 
             }
         )
+    }
+
+    
+    if (showSettingsDialog) {
+        val isCaseSensitive by viewModel.isCaseSensitiveTags.collectAsState()
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showSettingsDialog = false }) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Ajustes", style = MaterialTheme.typography.titleLarge)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Sensibilidad a mayúsculas", style = MaterialTheme.typography.bodyLarge)
+                            Text("Requiere coincidencia exacta de mayúsculas y minúsculas en las etiquetas.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = isCaseSensitive,
+                            onCheckedChange = { viewModel.setCaseSensitiveTags(it) }
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showSettingsDialog = false }) {
+                            Text("Cerrar")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (showFilterDialog) {
@@ -613,6 +693,9 @@ fun TagsDialog(
                                 Text(tag.fullName, style = MaterialTheme.typography.bodyLarge)
                                 val catName = categories.find { it.id == tag.categoryId }?.name ?: "Global"
                                 Text(catName, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                if (tag.aliases.isNotEmpty()) {
+                                    Text(tag.aliases.joinToString(", "), style = MaterialTheme.typography.bodySmall, color = Color.Gray.copy(alpha = 0.7f))
+                                }
                             }
                             IconButton(onClick = {
                                 editingTagId = tag.id
@@ -645,7 +728,7 @@ fun FilterDialog(
     onApply: (com.antakih.taskpen.ui.viewmodel.FilterState) -> Unit
 ) {
     var sortByDueDate by remember { mutableStateOf(currentState.sortByDueDate) }
-    var selectedTagIds by remember { mutableStateOf(currentState.selectedTagIds) }
+    var selectedTagIds by remember { mutableStateOf(currentState.selectedTags) }
     var showOnlyImportant by remember { mutableStateOf(currentState.showOnlyImportant) }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
@@ -679,18 +762,33 @@ fun FilterDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Etiquetas:", style = MaterialTheme.typography.bodyMedium)
+                
+                val tagsByCat = tags.groupBy { it.categoryId }
+                // Necesitamos el viewModel o category map... wait, FilterDialog no recibe categories!
+                // Pasaremos el mapa si es posible, o simplemente "Categoria N" si no hay nombre.
+                // Actually, let's just group them and if categoryId is null say "Global".
                 LazyColumn(modifier = Modifier.fillMaxHeight(0.3f)) {
-                    items(tags, key = { it.id }) { tag ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = selectedTagIds.contains(tag.id),
-                                onCheckedChange = { isChecked ->
-                                    val newSet = selectedTagIds.toMutableSet()
-                                    if (isChecked) newSet.add(tag.id) else newSet.remove(tag.id)
-                                    selectedTagIds = newSet
-                                }
+                    tagsByCat.forEach { (catId, catTags) ->
+                        item {
+                            Text(
+                                text = if (catId == null) "Global" else "Categoría específica",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp)
                             )
-                            Text(tag.fullName)
+                        }
+                        items(catTags, key = { it.id }) { tag ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = selectedTagIds.contains(tag.id),
+                                    onCheckedChange = { isChecked ->
+                                        val newSet = selectedTagIds.toMutableSet()
+                                        if (isChecked) newSet.add(tag.id) else newSet.remove(tag.id)
+                                        selectedTagIds = newSet
+                                    }
+                                )
+                                Text(tag.fullName)
+                            }
                         }
                     }
                 }
@@ -704,7 +802,7 @@ fun FilterDialog(
                     Button(onClick = {
                         onApply(com.antakih.taskpen.ui.viewmodel.FilterState(
                             sortByDueDate = sortByDueDate,
-                            selectedTagIds = selectedTagIds,
+                            selectedTags = selectedTagIds,
                             showOnlyImportant = showOnlyImportant
                         ))
                         onDismiss()

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.antakih.taskpen.data.local.dao.CategoryDao
 import com.antakih.taskpen.data.local.dao.SubjectDao
+import com.antakih.taskpen.data.local.SettingsManager
 import com.antakih.taskpen.data.local.dao.TaskDao
 import com.antakih.taskpen.data.local.entities.CategoryEntity
 import com.antakih.taskpen.data.local.entities.SubjectEntity
@@ -25,7 +26,6 @@ import javax.inject.Inject
 
 data class FilterState(
     val sortByDueDate: Boolean = false,
-    val selectedTagIds: Set<String> = emptySet(),
     val showOnlyImportant: Boolean = false,
     val searchQuery: String = "",
     val selectedCategories: Set<String> = emptySet(),
@@ -49,7 +49,8 @@ class TaskViewModel @Inject constructor(
     private val categoryDao: CategoryDao,
     private val subjectDao: SubjectDao,
     private val parseHandwrittenTextUseCase: ParseHandwrittenTextUseCase,
-    private val digitalInkHelper: DigitalInkHelper
+    private val digitalInkHelper: DigitalInkHelper,
+    private val settingsManager: SettingsManager
 ) : ViewModel() {
 
     private val _activeContext = MutableStateFlow<ViewContext>(ViewContext.General)
@@ -57,6 +58,12 @@ class TaskViewModel @Inject constructor(
 
     private val _filterState = MutableStateFlow(FilterState())
     val filterState: StateFlow<FilterState> = _filterState.asStateFlow()
+
+    val isCaseSensitiveTags = settingsManager.isCaseSensitiveTags
+
+    fun setCaseSensitiveTags(value: Boolean) {
+        settingsManager.setCaseSensitiveTags(value)
+    }
 
     fun updateFilterState(newState: FilterState) {
         _filterState.value = newState
@@ -171,7 +178,8 @@ class TaskViewModel @Inject constructor(
                     val result = parseHandwrittenTextUseCase(
                         linesWithX = recognizedLines,
                         activeCategoryId = currentCategory,
-                        existingTags = existingTags
+                        existingTags = existingTags,
+                        isCaseSensitive = isCaseSensitiveTags.value
                     )
                     // Guardar nuevas etiquetas encontradas explícitamente
                     result.newTags.forEach { subjectDao.insertSubject(it) }
@@ -196,7 +204,8 @@ class TaskViewModel @Inject constructor(
                 val result = parseHandwrittenTextUseCase(
                     linesWithX = lines,
                     activeCategoryId = currentCategory,
-                    existingTags = existingTags
+                    existingTags = existingTags,
+                    isCaseSensitive = isCaseSensitiveTags.value
                 )
                 // Guardar nuevas etiquetas encontradas explícitamente
                 result.newTags.forEach { subjectDao.insertSubject(it) }

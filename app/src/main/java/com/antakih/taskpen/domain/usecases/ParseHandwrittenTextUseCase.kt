@@ -19,7 +19,8 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
     operator fun invoke(
         linesWithX: List<Pair<String, Float>>,
         activeCategoryId: String? = null,
-        existingTags: List<SubjectEntity> = emptyList()
+        existingTags: List<SubjectEntity> = emptyList(),
+        isCaseSensitive: Boolean = false
     ): Result {
 
         val processedLines = mutableListOf<Pair<String, Float>>()
@@ -143,16 +144,24 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             }
 
             var tagId: String? = null
+            var autoCategoryId: String? = activeCategoryId
             
             // 1. Buscar explícitamente #etiqueta o [etiqueta]
             val explicitMatch = Regex("(#|\\[)([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)(\\])?").find(extractedTitle)
             if (explicitMatch != null) {
                 val originalWord = explicitMatch.groupValues[2].trim()
-                val foundWord = originalWord.lowercase()
-                val matchedTag = currentKnownTags.find { it.fullName.lowercase() == foundWord || it.aliases.contains(foundWord) }
+                
+                val matchedTag = currentKnownTags.find { 
+                    if (isCaseSensitive) {
+                        it.fullName == originalWord || it.aliases.contains(originalWord)
+                    } else {
+                        it.fullName.lowercase() == originalWord.lowercase() || it.aliases.map { a -> a.lowercase() }.contains(originalWord.lowercase())
+                    }
+                }
                 
                 if (matchedTag != null) {
                     tagId = matchedTag.id
+                    autoCategoryId = matchedTag.categoryId ?: activeCategoryId
                 } else {
                     // AUTO-CREAR LA ETIQUETA
                     val newTag = SubjectEntity(
@@ -171,12 +180,25 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             
             // 2. Buscar por contexto al final (para X, de X, en X) SOLO en etiquetas existentes
             if (tagId == null) {
-                val contextMatch = Regex("(?i)\\s+(para|para la|para el|de|de la|del|en|en la|en el)\\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\s*$").find(extractedTitle)
+                val contextRegexStr = if (isCaseSensitive) {
+                    "\\s+(para|para la|para el|de|de la|del|en|en la|en el)\\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\s*$"
+                } else {
+                    "(?i)\\s+(para|para la|para el|de|de la|del|en|en la|en el)\\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\s*$"
+                }
+                
+                val contextMatch = Regex(contextRegexStr).find(extractedTitle)
                 if (contextMatch != null) {
-                    val foundWord = contextMatch.groupValues[2].trim().lowercase()
-                    val matchedTag = currentKnownTags.find { it.fullName.lowercase() == foundWord || it.aliases.contains(foundWord) }
+                    val foundWord = contextMatch.groupValues[2].trim()
+                    val matchedTag = currentKnownTags.find { 
+                        if (isCaseSensitive) {
+                            it.fullName == foundWord || it.aliases.contains(foundWord)
+                        } else {
+                            it.fullName.lowercase() == foundWord.lowercase() || it.aliases.map { a -> a.lowercase() }.contains(foundWord.lowercase())
+                        }
+                    }
                     if (matchedTag != null) {
                         tagId = matchedTag.id
+                        autoCategoryId = matchedTag.categoryId ?: activeCategoryId
                         extractedTitle = extractedTitle.replace(contextMatch.value, "").trim()
                     }
                 }
@@ -190,7 +212,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
                 id = UUID.randomUUID().toString(),
                 title = finalTitle,
                 description = null,
-                categoryId = activeCategoryId,
+                categoryId = autoCategoryId,
                 subcategoryId = tagId,
                 parentTaskId = null,
                 createdAt = System.currentTimeMillis(),
