@@ -319,6 +319,13 @@ fun DashboardScreen(
                     else viewModel.setContext(ViewContext.Category(it)) 
                 },
                 onCreateCategoryClick = { showAllCategoriesSheet = true },
+                onUpdateCategory = { id, name, color -> viewModel.updateCategory(id, name, color) },
+                onDeleteCategory = { id -> 
+                    viewModel.deleteCategory(id) 
+                    if ((activeContext as? ViewContext.Category)?.categoryId == id) {
+                        viewModel.setContext(ViewContext.General)
+                    }
+                },
                 modifier = Modifier.width(360.dp).fillMaxHeight()
             )
             Box(modifier = Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
@@ -415,6 +422,15 @@ fun DashboardScreen(
             },
             onCreateCategory = { name, color -> 
                 viewModel.createCategory(name, color) 
+            },
+            onUpdateCategory = { id, name, color ->
+                viewModel.updateCategory(id, name, color)
+            },
+            onDeleteCategory = { id ->
+                viewModel.deleteCategory(id)
+                if ((activeContext as? ViewContext.Category)?.categoryId == id) {
+                    viewModel.setContext(ViewContext.General)
+                }
             }
         )
     }
@@ -1029,14 +1045,39 @@ fun AllCategoriesSheet(
     allCategories: List<CategoryEntity>,
     onDismiss: () -> Unit,
     onCategorySelected: (String) -> Unit,
-    onCreateCategory: (String, String) -> Unit
+    onCreateCategory: (String, String) -> Unit,
+    onUpdateCategory: (String, String, String) -> Unit,
+    onDeleteCategory: (String) -> Unit
 ) {
     var showCreateForm by remember { mutableStateOf(false) }
     var newCatName by remember { mutableStateOf("") }
+    
+    var editingCatId by remember { mutableStateOf<String?>(null) }
+    var editCatName by remember { mutableStateOf("") }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-            if (showCreateForm) {
+            if (editingCatId != null) {
+                Text("Editar Categoría", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = editCatName,
+                    onValueChange = { editCatName = it },
+                    label = { Text("Nombre") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = { editingCatId = null }) { Text("Cancelar") }
+                    Button(onClick = {
+                        if (editCatName.isNotBlank()) {
+                            onUpdateCategory(editingCatId!!, editCatName.trim(), "#6200EE")
+                            editingCatId = null
+                        }
+                    }) { Text("Guardar") }
+                }
+            } else if (showCreateForm) {
                 Text("Nueva Categoría", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
@@ -1064,7 +1105,26 @@ fun AllCategoriesSheet(
                     items(allCategories, key = { it.id }) { cat ->
                         ListItem(
                             headlineContent = { Text(cat.name) },
-                            modifier = Modifier.clickable { onCategorySelected(cat.id) }
+                            modifier = Modifier.clickable { onCategorySelected(cat.id) },
+                            trailingContent = {
+                                var expanded by remember { mutableStateOf(false) }
+                                Box {
+                                    IconButton(onClick = { expanded = true }) {
+                                        Icon(Icons.Default.MoreVert, contentDescription = "Opciones")
+                                    }
+                                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                        DropdownMenuItem(text = { Text("Editar") }, onClick = { 
+                                            editCatName = cat.name
+                                            editingCatId = cat.id
+                                            expanded = false
+                                        })
+                                        DropdownMenuItem(text = { Text("Eliminar") }, onClick = { 
+                                            onDeleteCategory(cat.id)
+                                            expanded = false
+                                        })
+                                    }
+                                }
+                            }
                         )
                     }
                     item {
@@ -1111,8 +1171,41 @@ fun LeftLandscapePanel(
     onSettingsClick: () -> Unit,
     onCategoryClick: (String) -> Unit,
     onCreateCategoryClick: () -> Unit,
+    onUpdateCategory: (String, String, String) -> Unit,
+    onDeleteCategory: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var editingCatId by remember { mutableStateOf<String?>(null) }
+    var editCatName by remember { mutableStateOf("") }
+    
+    if (editingCatId != null) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { editingCatId = null }) {
+            Card(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Editar Categoría", style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = editCatName,
+                        onValueChange = { editCatName = it },
+                        label = { Text("Nombre") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = { editingCatId = null }) { Text("Cancelar") }
+                        Button(onClick = {
+                            if (editCatName.isNotBlank()) {
+                                onUpdateCategory(editingCatId!!, editCatName.trim(), "#6200EE")
+                                editingCatId = null
+                            }
+                        }) { Text("Guardar") }
+                    }
+                }
+            }
+        }
+    }
+
     Column(modifier = modifier.statusBarsPadding().padding(16.dp)) {
         // Top Row: Search + Filter + Star
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1185,7 +1278,23 @@ fun LeftLandscapePanel(
                 ) {
                     Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text(cat.name, color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        var expanded by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { expanded = true }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                DropdownMenuItem(text = { Text("Editar") }, onClick = { 
+                                    editCatName = cat.name
+                                    editingCatId = cat.id
+                                    expanded = false
+                                })
+                                DropdownMenuItem(text = { Text("Eliminar") }, onClick = { 
+                                    onDeleteCategory(cat.id)
+                                    expanded = false
+                                })
+                            }
+                        }
                     }
                 }
             }

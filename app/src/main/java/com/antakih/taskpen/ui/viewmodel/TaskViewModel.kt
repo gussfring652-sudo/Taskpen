@@ -118,6 +118,27 @@ class TaskViewModel @Inject constructor(
 
 
 
+    
+    fun updateCategory(id: String, name: String, colorHex: String) {
+        viewModelScope.launch {
+            val cat = categoryDao.getCategoryById(id)
+            if (cat != null) {
+                categoryDao.updateCategory(cat.copy(name = name, colorHex = colorHex))
+            }
+        }
+    }
+
+    fun deleteCategory(id: String) {
+        viewModelScope.launch {
+            categoryDao.deleteCategory(id)
+            // Should also move tasks to Global (null) category?
+            val tasks = taskDao.getAllActiveTasks().first()
+            tasks.filter { it.categoryId == id }.forEach {
+                taskDao.insertTask(it.copy(categoryId = null))
+            }
+        }
+    }
+
     fun createCategory(name: String, colorHex: String = "#6200EE") {
         viewModelScope.launch {
             val category = CategoryEntity(
