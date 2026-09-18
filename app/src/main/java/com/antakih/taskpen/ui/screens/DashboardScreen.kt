@@ -157,9 +157,6 @@ fun DashboardScreen(
                             }
                         },
                         actions = {
-                            IconButton(onClick = { showSettingsFullScreen = true }) {
-                                Icon(Icons.Default.Settings, contentDescription = "Ajustes")
-                            }
                             IconButton(onClick = { showFilterDialog = true }) {
                                 Icon(Icons.Default.FilterList, contentDescription = "Filtros")
                             }
@@ -1164,10 +1161,7 @@ fun LeftLandscapePanel(
             MenuButton("Completadas", activeContext is ViewContext.Completed, { onContextSelected(ViewContext.Completed) }, Modifier.weight(1f))
             MenuButton("Papelera", activeContext is ViewContext.Trash, { onContextSelected(ViewContext.Trash) }, Modifier.weight(1f))
         }
-        Spacer(Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MenuButton("Ajustes", false, { onSettingsClick() }, Modifier.weight(1f))
-        }
+
         
         Spacer(Modifier.height(32.dp))
         
