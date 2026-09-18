@@ -318,6 +318,7 @@ fun DashboardScreen(
                     if ((activeContext as? ViewContext.Category)?.categoryId == it) viewModel.setContext(ViewContext.General) 
                     else viewModel.setContext(ViewContext.Category(it)) 
                 },
+                onCreateCategoryClick = { showAllCategoriesSheet = true },
                 modifier = Modifier.width(360.dp).fillMaxHeight()
             )
             Box(modifier = Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
@@ -1115,6 +1116,7 @@ fun LeftLandscapePanel(
     onToggleImportantFilter: () -> Unit,
     onSettingsClick: () -> Unit,
     onCategoryClick: (String) -> Unit,
+    onCreateCategoryClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.statusBarsPadding().padding(16.dp)) {
@@ -1168,6 +1170,9 @@ fun LeftLandscapePanel(
         // Categories Header
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("Categorías", style = MaterialTheme.typography.headlineMedium, color = Color.White, modifier = Modifier.weight(1f))
+            IconButton(onClick = onCreateCategoryClick) {
+                Icon(Icons.Default.Add, contentDescription = "Añadir Categoría", tint = Color.White)
+            }
             IconButton(onClick = onTagsClick) {
                 Icon(Icons.Default.Label, contentDescription = "Etiquetas", tint = Color.White)
             }
