@@ -157,6 +157,9 @@ fun DashboardScreen(
                             }
                         },
                         actions = {
+                            IconButton(onClick = { showSettingsFullScreen = true }) {
+                                Icon(Icons.Default.Settings, contentDescription = "Ajustes")
+                            }
                             IconButton(onClick = { showFilterDialog = true }) {
                                 Icon(Icons.Default.FilterList, contentDescription = "Filtros")
                             }
@@ -481,6 +484,46 @@ fun DashboardScreen(
                 viewModel.saveTasks(listOf(task) + subEntities)
             }
         )
+    }
+
+    if (showSettingsFullScreen) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showSettingsFullScreen = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            val isCaseSensitive by viewModel.isCaseSensitiveTags.collectAsState()
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                topBar = {
+                    TopAppBar(
+                        title = { Text("Ajustes") },
+                        navigationIcon = {
+                            IconButton(onClick = { showSettingsFullScreen = false }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    )
+                }
+            ) { padding ->
+                Column(modifier = Modifier.padding(padding).padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Sensibilidad a mayúsculas", style = MaterialTheme.typography.bodyLarge)
+                            Text("Requiere coincidencia exacta de mayúsculas y minúsculas en las etiquetas.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        }
+                        androidx.compose.material3.Switch(
+                            checked = isCaseSensitive,
+                            onCheckedChange = { viewModel.setCaseSensitiveTags(it) }
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 @OptIn(ExperimentalFoundationApi::class)
