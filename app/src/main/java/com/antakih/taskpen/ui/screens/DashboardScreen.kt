@@ -795,13 +795,7 @@ fun FilterDialog(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text("Filtros:", style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = showOnlyImportant, onCheckedChange = { showOnlyImportant = it })
-                    Text("Solo Importantes (★)")
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
+                
                 Text("Etiquetas:", style = MaterialTheme.typography.bodyMedium)
                 
                 val tagsByCat = tags.groupBy { it.categoryId }
