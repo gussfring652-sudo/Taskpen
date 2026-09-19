@@ -229,6 +229,9 @@ fun TaskDetailScreen(
                 onDismiss = { showEditDialog = false },
                 onSave = { title, desc, date, catId, tagId ->
                     viewModel.updateTaskDetails(task.id, title, desc, date, catId, tagId)
+                },
+                onSaveReminder = { priority, offsetMinutes ->
+                    viewModel.updateTaskReminder(task.id, priority, offsetMinutes)
                 }
             )
         }
@@ -266,13 +269,17 @@ fun EditTaskDialog(
     allCategories: List<com.antakih.taskpen.data.local.entities.CategoryEntity>,
     allTags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
     onDismiss: () -> Unit,
-    onSave: (title: String, desc: String, dueDate: Long?, categoryId: String?, subcategoryId: String?) -> Unit
+    onSave: (title: String, desc: String, dueDate: Long?, categoryId: String?, subcategoryId: String?) -> Unit,
+    onSaveReminder: ((priority: Int, offsetMinutes: Int?) -> Unit)? = null
 ) {
     var title by remember { mutableStateOf(task.title) }
     var description by remember { mutableStateOf(task.description ?: "") }
     var dueDateMillis by remember { mutableStateOf(task.dueDate) }
     var selectedCategoryId by remember { mutableStateOf(task.categoryId) }
     var selectedTagId by remember { mutableStateOf(task.subcategoryId) }
+    var selectedPriority by remember { mutableIntStateOf(task.priority) }
+    var useCustomOffset by remember { mutableStateOf(task.reminderOffsetMinutes != null) }
+    var customOffsetText by remember { mutableStateOf(task.reminderOffsetMinutes?.toString() ?: "") }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -280,6 +287,13 @@ fun EditTaskDialog(
     var tagExpanded by remember { mutableStateOf(false) }
 
     val dateString = dueDateMillis?.let { java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(it)) } ?: "Sin fecha y hora"
+
+    val priorityLabels = listOf("Baja", "Media", "Alta")
+    val priorityColors = listOf(
+        androidx.compose.ui.graphics.Color(0xFF4CAF50), // Verde
+        androidx.compose.ui.graphics.Color(0xFFFFC107), // Amarillo
+        androidx.compose.ui.graphics.Color(0xFFF44336)  // Rojo
+    )
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -317,6 +331,67 @@ fun EditTaskDialog(
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // --- Prioridad ---
+                Text("Prioridad", style = MaterialTheme.typography.labelLarge)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    priorityLabels.forEachIndexed { index, label ->
+                        FilterChip(
+                            selected = selectedPriority == index,
+                            onClick = { selectedPriority = index },
+                            label = { Text(label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = priorityColors[index].copy(alpha = 0.2f),
+                                selectedLabelColor = priorityColors[index]
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // --- Recordatorio ---
+                if (dueDateMillis != null) {
+                    Text("Recordatorio", style = MaterialTheme.typography.labelLarge)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    val cascadeDesc = when (selectedPriority) {
+                        2 -> "Cascada: 7d → 3d → 12h antes"
+                        1 -> "Cascada: 2d → 1d → 4h antes"
+                        else -> "Cascada: 1d → 12h → 1h antes"
+                    }
+                    Text(
+                        text = if (useCustomOffset) "Personalizado: ${customOffsetText.ifEmpty { "0" }} min antes" else "Automático ($cascadeDesc)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = useCustomOffset,
+                            onCheckedChange = { useCustomOffset = it }
+                        )
+                        Text("Personalizar minutos", style = MaterialTheme.typography.bodyMedium)
+                    }
+
+                    if (useCustomOffset) {
+                        OutlinedTextField(
+                            value = customOffsetText,
+                            onValueChange = { newValue ->
+                                customOffsetText = newValue.filter { it.isDigit() }
+                            },
+                            label = { Text("Minutos antes del vencimiento") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 // Categoría
                 Box(modifier = Modifier.fillMaxWidth()) {
@@ -390,6 +465,8 @@ fun EditTaskDialog(
                     Button(onClick = {
                         if (title.isNotBlank()) {
                             onSave(title.trim(), description.trim(), dueDateMillis, selectedCategoryId, selectedTagId)
+                            val offset = if (useCustomOffset) customOffsetText.toIntOrNull() else null
+                            onSaveReminder?.invoke(selectedPriority, offset)
                             onDismiss()
                         }
                     }) { Text("Guardar") }

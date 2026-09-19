@@ -83,6 +83,18 @@ fun DashboardScreen(
     var showDrawingSheet by remember { mutableStateOf(false) }
     var showManualTaskSheet by remember { mutableStateOf(false) }
 
+    // Solicitar permiso de notificaciones (Android 13+)
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+            contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { /* El usuario aceptó o rechazó, no necesitamos manejar aquí */ }
+
+        LaunchedEffect(Unit) {
+            val context = kotlinx.coroutines.Dispatchers.Main
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     val displayedTasks = remember(activeContext, filterState, activeTasks, deletedTasks) {
         val baseTasks = when (activeContext) {
             is ViewContext.Trash -> deletedTasks
@@ -505,38 +517,12 @@ fun DashboardScreen(
             onDismissRequest = { showSettingsFullScreen = false },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            val isCaseSensitive by viewModel.isCaseSensitiveTags.collectAsState()
-            Scaffold(
-                modifier = Modifier.fillMaxSize(),
-                topBar = {
-                    TopAppBar(
-                        title = { Text("Ajustes") },
-                        navigationIcon = {
-                            IconButton(onClick = { showSettingsFullScreen = false }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                    )
-                }
-            ) { padding ->
-                Column(modifier = Modifier.padding(padding).padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Sensibilidad a mayúsculas", style = MaterialTheme.typography.bodyLarge)
-                            Text("Requiere coincidencia exacta de mayúsculas y minúsculas en las etiquetas.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        }
-                        androidx.compose.material3.Switch(
-                            checked = isCaseSensitive,
-                            onCheckedChange = { viewModel.setCaseSensitiveTags(it) }
-                        )
-                    }
-                }
-            }
+            SettingsScreen(
+                viewModel = viewModel,
+                settingsManager = viewModel.settingsManager,
+                summaryScheduler = viewModel.summaryScheduler,
+                onDismiss = { showSettingsFullScreen = false }
+            )
         }
     }
 }
@@ -582,7 +568,18 @@ fun TaskCard(
                 Spacer(modifier = Modifier.width(8.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = task.title, style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (task.priority > 0) {
+                        val priorityColor = if (task.priority == 2) Color(0xFFF44336) else Color(0xFFFFC107)
+                        androidx.compose.foundation.Canvas(
+                            modifier = Modifier.size(8.dp).padding(end = 0.dp)
+                        ) {
+                            drawCircle(color = priorityColor)
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    Text(text = task.title, style = MaterialTheme.typography.titleMedium)
+                }
                 if (assignedTag != null) {
                     androidx.compose.material3.Surface(
                         color = MaterialTheme.colorScheme.secondaryContainer,

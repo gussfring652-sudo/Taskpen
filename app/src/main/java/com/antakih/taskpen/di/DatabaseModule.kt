@@ -49,12 +49,20 @@ object DatabaseModule {
             }
         }
 
+        val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE tasks ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE tasks ADD COLUMN reminderOffsetMinutes INTEGER DEFAULT NULL")
+                database.execSQL("ALTER TABLE tasks ADD COLUMN snoozeUntil INTEGER DEFAULT NULL")
+            }
+        }
+
         return Room.databaseBuilder(
             context,
             AppDatabase::class.java,
             "taskpen_database"
         )
-        .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+        .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
         .fallbackToDestructiveMigration(dropAllTables = true)
         .build()
     }

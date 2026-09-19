@@ -1,3 +1,31 @@
 <resources>
     <string name="app_name">Taskpen</string>
+
+    <!-- Notificaciones -->
+    <string name="channel_reminders">Recordatorios de tareas</string>
+    <string name="channel_reminders_desc">Notificaciones de recordatorio para tareas individuales</string>
+    <string name="channel_summaries">Resúmenes diarios</string>
+    <string name="channel_summaries_desc">Resúmenes matutinos y nocturnos de tareas pendientes</string>
+    <string name="action_complete">Completar</string>
+    <string name="action_snooze">Posponer</string>
+    <string name="snooze_title">Posponer Recordatorio</string>
+    <string name="snooze_15min">+15 minutos</string>
+    <string name="snooze_30min">+30 minutos</string>
+    <string name="snooze_1hour">+1 hora</string>
+    <string name="snooze_3hours">+3 horas</string>
+    <string name="snooze_tomorrow">Mañana a las 9:00</string>
+    <string name="morning_summary_title">☀️ Buenos días — Tus tareas de hoy</string>
+    <string name="evening_summary_title">🌙 Resumen nocturno</string>
+    <string name="no_tasks_today">¡Día libre de pendientes! 🎉</string>
+    <string name="all_tasks_done">¡Todas las tareas del día completadas! 🎉</string>
+    <string name="tasks_remaining">%d tarea(s) pendiente(s)</string>
+    <string name="priority_high">Alta</string>
+    <string name="priority_medium">Media</string>
+    <string name="priority_low">Baja</string>
+    <string name="settings_title">Configuración</string>
+    <string name="settings_general">General</string>
+    <string name="settings_reminders">Recordatorios</string>
+    <string name="settings_morning_summary">Resumen matutino</string>
+    <string name="settings_evening_summary">Resumen nocturno</string>
+    <string name="settings_case_sensitive">Sensibilidad a mayúsculas en etiquetas</string>
 </resources>

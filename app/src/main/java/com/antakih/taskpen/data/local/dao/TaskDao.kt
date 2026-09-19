@@ -55,4 +55,32 @@ interface TaskDao {
 
     @Query("DELETE FROM tasks WHERE id = :taskId")
     suspend fun permanentlyDeleteTask(taskId: String)
+
+    @Query("SELECT * FROM tasks WHERE id = :taskId")
+    suspend fun getTaskById(taskId: String): TaskEntity?
+
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND isDeleted = 0 AND dueDate IS NOT NULL")
+    suspend fun getPendingTasksWithDueDate(): List<TaskEntity>
+
+    @Query("""
+        SELECT * FROM tasks 
+        WHERE isCompleted = 0 AND isDeleted = 0 AND dueDate IS NOT NULL 
+        AND dueDate >= :startOfDay AND dueDate < :endOfDay
+        ORDER BY dueDate ASC
+    """)
+    suspend fun getTasksForDay(startOfDay: Long, endOfDay: Long): List<TaskEntity>
+
+    @Query("""
+        SELECT * FROM tasks 
+        WHERE isCompleted = 0 AND isDeleted = 0 AND dueDate IS NOT NULL 
+        AND dueDate < :endOfDay
+        ORDER BY dueDate ASC
+    """)
+    suspend fun getOverdueAndTodayTasks(endOfDay: Long): List<TaskEntity>
+
+    @Query("UPDATE tasks SET snoozeUntil = :snoozeUntil WHERE id = :taskId")
+    suspend fun updateSnoozeUntil(taskId: String, snoozeUntil: Long?)
+
+    @Query("UPDATE tasks SET priority = :priority, reminderOffsetMinutes = :offset WHERE id = :taskId")
+    suspend fun updateReminderSettings(taskId: String, priority: Int, offset: Int?)
 }

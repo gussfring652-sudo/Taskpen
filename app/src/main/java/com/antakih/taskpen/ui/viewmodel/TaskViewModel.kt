@@ -12,8 +12,11 @@ import com.antakih.taskpen.data.local.entities.SubjectEntity
 import com.antakih.taskpen.data.local.entities.TaskEntity
 import com.antakih.taskpen.domain.mlkit.DigitalInkHelper
 import com.antakih.taskpen.domain.usecases.ParseHandwrittenTextUseCase
+import com.antakih.taskpen.notifications.TaskAlarmScheduler
+import com.antakih.taskpen.notifications.SummaryScheduler
 import com.google.mlkit.vision.digitalink.Ink
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -51,7 +54,9 @@ class TaskViewModel @Inject constructor(
     private val subjectDao: SubjectDao,
     private val parseHandwrittenTextUseCase: ParseHandwrittenTextUseCase,
     private val digitalInkHelper: DigitalInkHelper,
-    private val settingsManager: SettingsManager
+    val settingsManager: SettingsManager,
+    private val taskAlarmScheduler: TaskAlarmScheduler,
+    val summaryScheduler: SummaryScheduler
 ) : ViewModel() {
 
     private val _activeContext = MutableStateFlow<ViewContext>(ViewContext.General)
@@ -243,6 +248,10 @@ class TaskViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 taskDao.insertTasks(tasks)
+                // Programar alarmas en cascada para tareas con dueDate
+                tasks.filter { it.dueDate != null && !it.isCompleted }.forEach { task ->
+                    taskAlarmScheduler.scheduleAlarm(task)
+                }
                 Log.d("TaskPenML", "Tareas confirmadas guardadas: ${tasks.size}")
             } catch (e: Throwable) {
                 Log.e("TaskPenML", "Error al guardar tareas: ${e.message}", e)
@@ -252,7 +261,10 @@ class TaskViewModel @Inject constructor(
 
     fun completeTask(taskId: String) {
         viewModelScope.launch {
-            try { taskDao.markTaskAsCompleted(taskId) }
+            try {
+                taskDao.markTaskAsCompleted(taskId)
+                taskAlarmScheduler.cancelAlarm(taskId)
+            }
             catch (e: Throwable) { Log.e("TaskPenML", "Error al completar tarea: ${e.message}", e) }
         }
     }
@@ -297,10 +309,38 @@ class TaskViewModel @Inject constructor(
             val allTasks = taskDao.getAllActiveTasks().first()
             val task = allTasks.find { it.id == id }
             if (task != null) {
-                taskDao.insertTask(task.copy(title = title, description = description, dueDate = dueDate, categoryId = categoryId, subcategoryId = subcategoryId))
+                val updatedTask = task.copy(title = title, description = description, dueDate = dueDate, categoryId = categoryId, subcategoryId = subcategoryId)
+                taskDao.insertTask(updatedTask)
+                // Reprogramar alarma si la tarea tiene dueDate
+                if (dueDate != null && !updatedTask.isCompleted) {
+                    taskAlarmScheduler.scheduleAlarm(updatedTask)
+                } else {
+                    taskAlarmScheduler.cancelAlarm(id)
+                }
             }
         }
     }
+
+    fun updateTaskReminder(taskId: String, priority: Int, offsetMinutes: Int?) {
+        viewModelScope.launch {
+            try {
+                taskDao.updateReminderSettings(taskId, priority, offsetMinutes)
+                // Reprogramar alarma con los nuevos settings
+                val task = taskDao.getTaskById(taskId)
+                if (task != null && task.dueDate != null && !task.isCompleted) {
+                    taskAlarmScheduler.scheduleAlarm(task)
+                }
+            } catch (e: Throwable) {
+                Log.e("TaskPenML", "Error al actualizar recordatorio: ${e.message}", e)
+            }
+        }
+    }
+
+    // Flows para la pantalla de Settings
+    val morningSummaryHour: Flow<Int> = settingsManager.morningSummaryHour
+    val morningSummaryMinute: Flow<Int> = settingsManager.morningSummaryMinute
+    val eveningSummaryHour: Flow<Int> = settingsManager.eveningSummaryHour
+    val eveningSummaryMinute: Flow<Int> = settingsManager.eveningSummaryMinute
 
     fun getSubtasks(parentTaskId: String) = taskDao.getSubtasks(parentTaskId)
 }
