@@ -133,8 +133,12 @@ class TaskAlarmScheduler @Inject constructor(
             return if (manualTrigger > now) manualTrigger else null
         }
 
-        // Prioridad 3: Cascada dinámica
-        return calculateNextCascadePoint(task.priority, dueDate, now)
+        // Prioridad 3: Cascada dinámica o tiempo exacto
+        return if (task.reminderMode == 1) {
+            calculateNextCascadePoint(task.priority, dueDate, now)
+        } else {
+            if (dueDate > now) dueDate else null
+        }
     }
 
     /**

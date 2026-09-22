@@ -321,14 +321,20 @@ class TaskViewModel @Inject constructor(
         }
     }
 
-    fun updateTaskReminder(taskId: String, priority: Int, offsetMinutes: Int?) {
+    fun updateTaskReminder(taskId: String, priority: Int, offsetMinutes: Int?, reminderMode: Int) {
         viewModelScope.launch {
             try {
-                taskDao.updateReminderSettings(taskId, priority, offsetMinutes)
-                // Reprogramar alarma con los nuevos settings
                 val task = taskDao.getTaskById(taskId)
-                if (task != null && task.dueDate != null && !task.isCompleted) {
-                    taskAlarmScheduler.scheduleAlarm(task)
+                if (task != null) {
+                    val updatedTask = task.copy(
+                        priority = priority,
+                        reminderOffsetMinutes = offsetMinutes,
+                        reminderMode = reminderMode
+                    )
+                    taskDao.insertTask(updatedTask)
+                    
+                    // Reprogramar alarmas si es necesario
+                    taskAlarmScheduler.scheduleAlarm(updatedTask)
                 }
             } catch (e: Throwable) {
                 Log.e("TaskPenML", "Error al actualizar recordatorio: ${e.message}", e)

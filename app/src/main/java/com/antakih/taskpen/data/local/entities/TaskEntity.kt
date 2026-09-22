@@ -28,6 +28,7 @@ data class TaskEntity(
     @ColumnInfo(defaultValue = "0") val isDeleted: Boolean = false,
     @ColumnInfo(defaultValue = "NULL") val deletedAt: Long? = null,
     @ColumnInfo(defaultValue = "0") val priority: Int = 0,
+    @ColumnInfo(defaultValue = "1") val reminderMode: Int = 1,
     @ColumnInfo(defaultValue = "NULL") val reminderOffsetMinutes: Int? = null,
     @ColumnInfo(defaultValue = "NULL") val snoozeUntil: Long? = null,
     val calendarEventId: String?

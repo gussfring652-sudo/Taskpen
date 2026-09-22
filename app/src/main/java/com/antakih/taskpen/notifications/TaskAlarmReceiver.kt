@@ -69,12 +69,15 @@ class TaskAlarmReceiver : BroadcastReceiver() {
                 // El bucle se rompe naturalmente cuando no quedan más
                 // puntos de cascada futuros.
                 val rescheduledTask = task.copy(snoozeUntil = null)
-                val hasNext = taskAlarmScheduler.scheduleAlarm(rescheduledTask)
-
-                if (hasNext) {
-                    Log.d(TAG, "Siguiente alarma en cascada programada para: ${task.title}")
+                if (rescheduledTask.reminderMode == 1) { // 1 = Cascade
+                    val hasNext = taskAlarmScheduler.scheduleAlarm(rescheduledTask)
+                    if (hasNext) {
+                        Log.d(TAG, "Siguiente alarma en cascada programada para: ${task.title}")
+                    } else {
+                        Log.d(TAG, "Última alarma de cascada para: ${task.title}")
+                    }
                 } else {
-                    Log.d(TAG, "Última alarma de cascada para: ${task.title}")
+                    Log.d(TAG, "Alarma puntual disparada, no se reprograma (modo EXACT).")
                 }
 
             } catch (e: Exception) {

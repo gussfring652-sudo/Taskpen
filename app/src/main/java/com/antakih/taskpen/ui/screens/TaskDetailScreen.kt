@@ -230,8 +230,8 @@ fun TaskDetailScreen(
                 onSave = { title, desc, date, catId, tagId ->
                     viewModel.updateTaskDetails(task.id, title, desc, date, catId, tagId)
                 },
-                onSaveReminder = { priority, offsetMinutes ->
-                    viewModel.updateTaskReminder(task.id, priority, offsetMinutes)
+                onSaveReminder = { priority, offsetMinutes, reminderMode ->
+                    viewModel.updateTaskReminder(task.id, priority, offsetMinutes, reminderMode)
                 }
             )
         }
@@ -270,7 +270,7 @@ fun EditTaskDialog(
     allTags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
     onDismiss: () -> Unit,
     onSave: (title: String, desc: String, dueDate: Long?, categoryId: String?, subcategoryId: String?) -> Unit,
-    onSaveReminder: ((priority: Int, offsetMinutes: Int?) -> Unit)? = null
+    onSaveReminder: ((priority: Int, offsetMinutes: Int?, reminderMode: Int) -> Unit)? = null
 ) {
     var title by remember { mutableStateOf(task.title) }
     var description by remember { mutableStateOf(task.description ?: "") }
@@ -278,6 +278,7 @@ fun EditTaskDialog(
     var selectedCategoryId by remember { mutableStateOf(task.categoryId) }
     var selectedTagId by remember { mutableStateOf(task.subcategoryId) }
     var selectedPriority by remember { mutableIntStateOf(task.priority) }
+    var selectedReminderMode by remember { mutableIntStateOf(task.reminderMode) }
     var useCustomOffset by remember { mutableStateOf(task.reminderOffsetMinutes != null) }
     var customOffsetText by remember { mutableStateOf(task.reminderOffsetMinutes?.toString() ?: "") }
 
@@ -357,26 +358,54 @@ fun EditTaskDialog(
                 // --- Recordatorio ---
                 if (dueDateMillis != null) {
                     Text("Recordatorio", style = MaterialTheme.typography.labelLarge)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Modo de Recordatorio
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedReminderMode == 0,
+                            onClick = { selectedReminderMode = 0 },
+                            label = { Text("Puntual (1 vez)") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = selectedReminderMode == 1,
+                            onClick = { selectedReminderMode = 1 },
+                            label = { Text("Cascada (Deadline)") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     
-                    val cascadeDesc = when (selectedPriority) {
-                        2 -> "Cascada: 7d → 3d → 12h antes"
-                        1 -> "Cascada: 2d → 1d → 4h antes"
-                        else -> "Cascada: 1d → 12h → 1h antes"
+                    if (selectedReminderMode == 1) {
+                        val cascadeDesc = when (selectedPriority) {
+                            2 -> "7d → 3d → 12h antes"
+                            1 -> "2d → 1d → 4h antes"
+                            else -> "1d → 12h → 1h antes"
+                        }
+                        Text(
+                            text = "Avisos múltiples: $cascadeDesc",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(
+                            text = "Sonará exactamente en el momento de vencimiento.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    Text(
-                        text = if (useCustomOffset) "Personalizado: ${customOffsetText.ifEmpty { "0" }} min antes" else "Automático ($cascadeDesc)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
                             checked = useCustomOffset,
                             onCheckedChange = { useCustomOffset = it }
                         )
-                        Text("Personalizar minutos", style = MaterialTheme.typography.bodyMedium)
+                        Text("Personalizar anticipación", style = MaterialTheme.typography.bodyMedium)
                     }
 
                     if (useCustomOffset) {
@@ -465,8 +494,8 @@ fun EditTaskDialog(
                     Button(onClick = {
                         if (title.isNotBlank()) {
                             onSave(title.trim(), description.trim(), dueDateMillis, selectedCategoryId, selectedTagId)
-                            val offset = if (useCustomOffset) customOffsetText.toIntOrNull() else null
-                            onSaveReminder?.invoke(selectedPriority, offset)
+                            val finalOffset = if (useCustomOffset) customOffsetText.toIntOrNull() else null
+                            onSaveReminder?.invoke(selectedPriority, finalOffset, selectedReminderMode)
                             onDismiss()
                         }
                     }) { Text("Guardar") }

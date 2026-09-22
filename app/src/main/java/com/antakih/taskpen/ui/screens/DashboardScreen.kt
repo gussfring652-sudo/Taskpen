@@ -961,6 +961,41 @@ fun ManualTaskSheet(
                 Text("Marcar como Importante (★)")
             }
             
+            var selectedPriority by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+            var selectedReminderMode by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(1) } // 1 = Cascade por defecto
+            
+            if (dueDateMillis != null) {
+                Spacer(Modifier.height(8.dp))
+                Text("Prioridad:", style = MaterialTheme.typography.titleMedium)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Baja", "Media", "Alta").forEachIndexed { index, label ->
+                        FilterChip(
+                            selected = selectedPriority == index,
+                            onClick = { selectedPriority = index },
+                            label = { Text(label) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                
+                Spacer(Modifier.height(8.dp))
+                Text("Modo de Recordatorio:", style = MaterialTheme.typography.titleMedium)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = selectedReminderMode == 0,
+                        onClick = { selectedReminderMode = 0 },
+                        label = { Text("Puntual (1 vez)") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = selectedReminderMode == 1,
+                        onClick = { selectedReminderMode = 1 },
+                        label = { Text("Cascada (Deadline)") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = {
@@ -978,6 +1013,10 @@ fun ManualTaskSheet(
                             isCompleted = false,
                             isImportant = isImportant,
                             isDeleted = false,
+                            priority = selectedPriority,
+                            reminderMode = selectedReminderMode,
+                            reminderOffsetMinutes = null,
+                            snoozeUntil = null,
                             calendarEventId = null
                         )
                         onSave(task, subtasks)

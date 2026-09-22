@@ -110,12 +110,15 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             var extractedTitle = workingLine.replace(Regex("[,\\-:]$"), "").trim()
 
             // 0. Parse Date and Time
-            val (textAfterDate, parsedDate) = extractDate(extractedTitle)
-            val (textAfterTime, parsedTime) = extractTime(textAfterDate)
+            val (textAfterDate, parsedDate, dateMode) = extractDate(extractedTitle)
+            val (textAfterTime, parsedTime, timeMode) = extractTime(textAfterDate)
             extractedTitle = textAfterTime
             
             var dueDateMillis: Long? = null
             var hasTime = false
+            // Default mode is 1 (Cascade/Deadline). 
+            // If either date or time was parsed with "en X" (mode 0), we set it to Exact (0).
+            var reminderMode = if (dateMode == 0 || timeMode == 0) 0 else 1
             
             if (parsedDate != null || parsedTime != null) {
                 val cal = Calendar.getInstance()
@@ -147,48 +150,44 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             var autoCategoryId: String? = activeCategoryId
             
             // 1. Buscar explícitamente #etiqueta o [etiqueta]
-            val explicitMatch = Regex("(#|\\[)([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)(\\])?").find(extractedTitle)
+            val explicitTagRegex = Regex("(?i)[#\\[]([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\]?")
+            val explicitMatch = explicitTagRegex.find(extractedTitle)
             if (explicitMatch != null) {
-                val originalWord = explicitMatch.groupValues[2].trim()
-                
+                val tagName = explicitMatch.groupValues[1]
                 val matchedTag = currentKnownTags.find { 
                     if (isCaseSensitive) {
-                        it.fullName == originalWord || it.aliases.contains(originalWord)
+                        it.fullName == tagName || it.aliases.contains(tagName)
                     } else {
-                        it.fullName.lowercase() == originalWord.lowercase() || it.aliases.map { a -> a.lowercase() }.contains(originalWord.lowercase())
+                        it.fullName.lowercase() == tagName.lowercase() || it.aliases.map { a -> a.lowercase() }.contains(tagName.lowercase())
                     }
                 }
-                
                 if (matchedTag != null) {
                     tagId = matchedTag.id
                     autoCategoryId = matchedTag.categoryId ?: activeCategoryId
                 } else {
-                    // AUTO-CREAR LA ETIQUETA
                     val newTag = SubjectEntity(
                         id = UUID.randomUUID().toString(),
-                        categoryId = activeCategoryId,
-                        fullName = originalWord,
+                        fullName = tagName,
                         aliases = emptyList(),
-                        semester = null
+                        categoryId = activeCategoryId
                     )
                     newTagsToSave.add(newTag)
                     currentKnownTags.add(newTag)
                     tagId = newTag.id
+                    autoCategoryId = activeCategoryId
                 }
                 extractedTitle = extractedTitle.replace(explicitMatch.value, "").trim()
-            }
-            
-            // 2. Buscar por contexto al final (para X, de X, en X) SOLO en etiquetas existentes
-            if (tagId == null) {
+            } else {
+                // 2. Buscar por contexto al final (para X, de X, en X) SOLO en etiquetas existentes
+                // Ahora no afecta al modo, eso ya se extrajo antes.
                 val contextRegexStr = if (isCaseSensitive) {
                     "\\s+(para|para la|para el|de|de la|del|en|en la|en el)\\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\s*$"
                 } else {
                     "(?i)\\s+(para|para la|para el|de|de la|del|en|en la|en el)\\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\s*$"
                 }
-                
-                val contextMatch = Regex(contextRegexStr).find(extractedTitle)
-                if (contextMatch != null) {
-                    val foundWord = contextMatch.groupValues[2].trim()
+                val contextRegex = Regex(contextRegexStr)
+                contextRegex.find(extractedTitle)?.let { contextMatch ->
+                    val foundWord = contextMatch.groupValues[2]
                     val matchedTag = currentKnownTags.find { 
                         if (isCaseSensitive) {
                             it.fullName == foundWord || it.aliases.contains(foundWord)
@@ -221,6 +220,10 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
                 isCompleted = false,
                 isImportant = isImportant,
                 isDeleted = false,
+                priority = 0,
+                reminderMode = reminderMode,
+                reminderOffsetMinutes = null,
+                snoozeUntil = null,
                 calendarEventId = null
             )
             extractedTasks.add(newTask)
@@ -274,7 +277,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
         }
     }
 
-    private fun extractDate(text: String): Pair<String, Calendar?> {
+    private fun extractDate(text: String): Triple<String, Calendar?, Int> {
         var cleanedText = text
         var cal: Calendar? = null
         val now = Calendar.getInstance()
@@ -292,7 +295,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             }
             cal?.set(year, month, day)
             cleanedText = cleanedText.replace(match.value, "")
-            return Pair(cleanedText.trim(), cal)
+            return Triple(cleanedText.trim(), cal, 1)
         }
 
         val dateTextRegex = Regex("(?i)\\b(\\d{1,2})\\s+de\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\\s+de\\s+(\\d{2,4}))?\\b")
@@ -308,7 +311,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             }
             cal?.set(year, month, day)
             cleanedText = cleanedText.replace(match.value, "")
-            return Pair(cleanedText.trim(), cal)
+            return Triple(cleanedText.trim(), cal, 1)
         }
 
         val dateTomorrowRegex = Regex("(?i)\\b(?:para\\s+)?mañana\\b")
@@ -316,7 +319,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             cal = Calendar.getInstance()
             cal?.add(Calendar.DAY_OF_YEAR, 1)
             cleanedText = cleanedText.replace(match.value, "")
-            return Pair(cleanedText.trim(), cal)
+            return Triple(cleanedText.trim(), cal, 1)
         }
 
         val dateWeekdayRegex = Regex("(?i)\\b(?:para el|próximo|proximo|el|para|este)\\s+(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\\b")
@@ -328,33 +331,43 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             if (daysToAdd <= 0) daysToAdd += 7
             cal?.add(Calendar.DAY_OF_YEAR, daysToAdd)
             cleanedText = cleanedText.replace(match.value, "")
-            return Pair(cleanedText.trim(), cal)
+            return Triple(cleanedText.trim(), cal, 1)
         }
 
-        val dateInXDaysRegex = Regex("(?i)\\ben\\s+(\\d+)\\s+días?\\b")
-        dateInXDaysRegex.find(cleanedText)?.let { match ->
+        val dateInXRegex = Regex("(?i)\\ben\\s+(\\d+)\\s+(día|dia|mes|semana)(?:s|es)?\\b")
+        dateInXRegex.find(cleanedText)?.let { match ->
             cal = Calendar.getInstance()
-            val days = match.groupValues[1].toInt()
-            cal?.add(Calendar.DAY_OF_YEAR, days)
+            val amount = match.groupValues[1].toInt()
+            val unit = match.groupValues[2].lowercase()
+            when {
+                unit == "mes" -> cal?.add(Calendar.MONTH, amount)
+                unit == "semana" -> cal?.add(Calendar.WEEK_OF_YEAR, amount)
+                else -> cal?.add(Calendar.DAY_OF_YEAR, amount)
+            }
             cleanedText = cleanedText.replace(match.value, "")
-            return Pair(cleanedText.trim(), cal)
+            return Triple(cleanedText.trim(), cal, 0)
         }
 
-        return Pair(cleanedText, null)
+        return Triple(cleanedText, null, 1)
     }
 
-    private fun extractTime(text: String): Pair<String, Pair<Int, Int>?> {
+    private fun extractTime(text: String): Triple<String, Pair<Int, Int>?, Int> {
         var cleanedText = text
         var timePair: Pair<Int, Int>? = null
 
-        val timeInXHoursRegex = Regex("(?i)\\ben\\s+(\\d+)\\s+horas?\\b")
-        timeInXHoursRegex.find(cleanedText)?.let { match ->
+        val timeInXRegex = Regex("(?i)\\ben\\s+(\\d+)\\s+(hora|minuto)s?\\b")
+        timeInXRegex.find(cleanedText)?.let { match ->
             val now = Calendar.getInstance()
-            val hours = match.groupValues[1].toInt()
-            now.add(Calendar.HOUR_OF_DAY, hours)
+            val amount = match.groupValues[1].toInt()
+            val unit = match.groupValues[2].lowercase()
+            if (unit == "hora") {
+                now.add(Calendar.HOUR_OF_DAY, amount)
+            } else if (unit == "minuto") {
+                now.add(Calendar.MINUTE, amount)
+            }
             timePair = Pair(now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE))
             cleanedText = cleanedText.replace(match.value, "")
-            return Pair(cleanedText.trim(), timePair)
+            return Triple(cleanedText.trim(), timePair, 0)
         }
 
         val timeColonRegex = Regex("(?i)\\b(?:a las\\s+)?(\\d{1,2}):(\\d{2})(?:\\s*(am|pm|a\\.m\\.|p\\.m\\.|hrs|horas))?\\b")
@@ -366,7 +379,7 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             if (ampm == "am" && hour == 12) hour = 0
             timePair = Pair(hour, minute)
             cleanedText = cleanedText.replace(match.value, "")
-            return Pair(cleanedText.trim(), timePair)
+            return Triple(cleanedText.trim(), timePair, 1)
         }
 
         val timeLiteralRegex = Regex("(?i)\\b(?:a las\\s+)?(\\d{1,2})\\s*(am|pm|a\\.m\\.|p\\.m\\.)\\b")
@@ -377,9 +390,9 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             if (ampm == "am" && hour == 12) hour = 0
             timePair = Pair(hour, 0)
             cleanedText = cleanedText.replace(match.value, "")
-            return Pair(cleanedText.trim(), timePair)
+            return Triple(cleanedText.trim(), timePair, 1)
         }
 
-        return Pair(cleanedText, null)
+        return Triple(cleanedText, null, 1)
     }
 }
