@@ -230,8 +230,8 @@ fun TaskDetailScreen(
                 onSave = { title, desc, date, catId, tagId ->
                     viewModel.updateTaskDetails(task.id, title, desc, date, catId, tagId)
                 },
-                onSaveReminder = { priority, offsetMinutes, reminderMode, customCascadeInterval ->
-                    viewModel.updateTaskReminder(task.id, priority, offsetMinutes, reminderMode, customCascadeInterval)
+                onSaveReminder = { priority, offsetMinutes, reminderMode, customCascadeInterval, recurrenceInterval ->
+                    viewModel.updateTaskReminder(task.id, priority, offsetMinutes, reminderMode, customCascadeInterval, recurrenceInterval)
                 }
             )
         }
@@ -270,7 +270,7 @@ fun EditTaskDialog(
     allTags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
     onDismiss: () -> Unit,
     onSave: (title: String, desc: String, dueDate: Long?, categoryId: String?, subcategoryId: String?) -> Unit,
-    onSaveReminder: ((priority: Int, offsetMinutes: Int?, reminderMode: Int, customCascadeInterval: Int?) -> Unit)? = null
+    onSaveReminder: ((priority: Int, offsetMinutes: Int?, reminderMode: Int, customCascadeInterval: Int?, recurrenceInterval: Int?) -> Unit)? = null
 ) {
     var title by remember { mutableStateOf(task.title) }
     var description by remember { mutableStateOf(task.description ?: "") }
@@ -281,6 +281,7 @@ fun EditTaskDialog(
     var selectedReminderMode by remember { mutableIntStateOf(task.reminderMode) }
     var customOffsetValue by remember { mutableStateOf(task.reminderOffsetMinutes) }
     var customCascadeValue by remember { mutableStateOf(task.customCascadeIntervalMinutes) }
+    var customRecurrenceValue by remember { mutableStateOf(task.recurrenceIntervalMinutes) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -416,6 +417,17 @@ fun EditTaskDialog(
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
+                
+                if (dueDateMillis != null) {
+                    Text("Recurrencia (Repetición periódica):", style = MaterialTheme.typography.titleMedium)
+                    com.antakih.taskpen.ui.components.ReminderOffsetPicker(
+                        label = "Repetir tarea",
+                        initialValueMinutes = task.recurrenceIntervalMinutes,
+                        isCascadeMode = true,
+                        onOffsetChanged = { customRecurrenceValue = it }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 // Categoría
                 Box(modifier = Modifier.fillMaxWidth()) {
@@ -489,7 +501,7 @@ fun EditTaskDialog(
                     Button(onClick = {
                         if (title.isNotBlank()) {
                             onSave(title.trim(), description.trim(), dueDateMillis, selectedCategoryId, selectedTagId)
-                            onSaveReminder?.invoke(selectedPriority, customOffsetValue, selectedReminderMode, customCascadeValue)
+                            onSaveReminder?.invoke(selectedPriority, customOffsetValue, selectedReminderMode, customCascadeValue, customRecurrenceValue)
                             onDismiss()
                         }
                     }) { Text("Guardar") }

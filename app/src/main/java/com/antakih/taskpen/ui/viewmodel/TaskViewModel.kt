@@ -273,8 +273,33 @@ class TaskViewModel @Inject constructor(
     fun completeTask(taskId: String) {
         viewModelScope.launch {
             try {
-                taskDao.markTaskAsCompleted(taskId)
-                taskAlarmScheduler.cancelAlarm(taskId)
+                val task = taskDao.getTaskById(taskId)
+                if (task != null) {
+                    if (task.recurrenceIntervalMinutes != null && task.dueDate != null) {
+                        // It's a recurring task
+                        val nextDueDate = task.dueDate + (task.recurrenceIntervalMinutes * 60_000L)
+                        val nextTask = task.copy(
+                            id = UUID.randomUUID().toString(),
+                            dueDate = nextDueDate,
+                            createdAt = System.currentTimeMillis(),
+                            isCompleted = false
+                        )
+                        
+                        val completedOriginal = task.copy(
+                            isCompleted = true,
+                            recurrenceIntervalMinutes = null // Clear recurrence so it doesn't clone again if uncompleted
+                        )
+                        
+                        taskDao.insertTask(completedOriginal)
+                        taskDao.insertTask(nextTask)
+                        taskAlarmScheduler.scheduleAlarm(nextTask)
+                    } else {
+                        // Normal task
+                        taskDao.insertTask(task.copy(isCompleted = true))
+                    }
+                    // Cancel alarm for completed original task
+                    taskAlarmScheduler.cancelAlarm(task.id)
+                }
             }
             catch (e: Throwable) { Log.e("TaskPenML", "Error al completar tarea: ${e.message}", e) }
         }
@@ -332,7 +357,7 @@ class TaskViewModel @Inject constructor(
         }
     }
 
-    fun updateTaskReminder(taskId: String, priority: Int, offsetMinutes: Int?, reminderMode: Int, customCascadeInterval: Int? = null) {
+    fun updateTaskReminder(taskId: String, priority: Int, offsetMinutes: Int?, reminderMode: Int, customCascadeInterval: Int? = null, recurrenceInterval: Int? = null) {
         viewModelScope.launch {
             try {
                 val task = taskDao.getTaskById(taskId)
@@ -341,7 +366,8 @@ class TaskViewModel @Inject constructor(
                         priority = priority,
                         reminderOffsetMinutes = offsetMinutes,
                         reminderMode = reminderMode,
-                        customCascadeIntervalMinutes = customCascadeInterval
+                        customCascadeIntervalMinutes = customCascadeInterval,
+                        recurrenceIntervalMinutes = recurrenceInterval
                     )
                     taskDao.insertTask(updatedTask)
                     

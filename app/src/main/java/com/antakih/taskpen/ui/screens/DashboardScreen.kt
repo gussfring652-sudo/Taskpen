@@ -45,6 +45,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.antakih.taskpen.data.local.entities.CategoryEntity
 import com.antakih.taskpen.data.local.entities.TaskEntity
+
+import com.antakih.taskpen.ui.utils.groupTasksChronologically
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
 import com.antakih.taskpen.ui.viewmodel.ViewContext
 
@@ -270,12 +272,7 @@ fun DashboardScreen(
                 } else {
                     LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
                         if (filterState.sortByDueDate) {
-                            val grouped = displayedTasks.groupBy { task ->
-                                if (task.dueDate == null) "Sin Fecha"
-                                else if (android.text.format.DateUtils.isToday(task.dueDate)) "Hoy"
-                                else if (android.text.format.DateUtils.isToday(task.dueDate - 86400000)) "Mañana"
-                                else android.text.format.DateFormat.format("dd MMM yyyy", task.dueDate).toString()
-                            }
+                            val grouped = groupTasksChronologically(displayedTasks)
                             grouped.forEach { (header, tasksInGroup) ->
                                 item {
                                     Text(
@@ -663,6 +660,16 @@ fun TaskCard(
                                 )
                             }
                         }
+                        
+                        if (task.recurrenceIntervalMinutes != null) {
+                            val interval = task.recurrenceIntervalMinutes
+                            val text = if (interval >= 1440) "Repetir: ${interval / 1440}d" else "Repetir: ${interval / 60}h"
+                            AssistChip(
+                                onClick = {},
+                                label = { Text(text, style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = "Recurrente", modifier = Modifier.size(16.dp)) }
+                            )
+                        }
                     }
                 }
             }
@@ -1032,6 +1039,7 @@ fun ManualTaskSheet(
             var selectedReminderMode by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(1) } // 1 = Cascade por defecto
             var customOffsetValue by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
             var customCascadeValue by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
+            var customRecurrenceValue by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
 
             if (dueDateMillis != null) {
                 Spacer(Modifier.height(8.dp))
@@ -1081,6 +1089,15 @@ fun ManualTaskSheet(
                         onOffsetChanged = { customOffsetValue = it }
                     )
                 }
+
+                Spacer(Modifier.height(16.dp))
+                Text("Recurrencia (Repetición periódica):", style = MaterialTheme.typography.titleMedium)
+                com.antakih.taskpen.ui.components.ReminderOffsetPicker(
+                    label = "Repetir tarea",
+                    initialValueMinutes = customRecurrenceValue,
+                    isCascadeMode = true,
+                    onOffsetChanged = { customRecurrenceValue = it }
+                )
             }
             
             Spacer(Modifier.height(16.dp))
@@ -1104,6 +1121,7 @@ fun ManualTaskSheet(
                             reminderMode = selectedReminderMode,
                             reminderOffsetMinutes = customOffsetValue,
                             customCascadeIntervalMinutes = customCascadeValue,
+                            recurrenceIntervalMinutes = customRecurrenceValue,
                             snoozeUntil = null,
                             calendarEventId = null
                         )

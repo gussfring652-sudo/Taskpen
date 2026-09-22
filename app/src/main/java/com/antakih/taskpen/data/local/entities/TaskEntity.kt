@@ -32,5 +32,6 @@ data class TaskEntity(
     @ColumnInfo(defaultValue = "NULL") val reminderOffsetMinutes: Int? = null,
     @ColumnInfo(defaultValue = "NULL") val snoozeUntil: Long? = null,
     @ColumnInfo(defaultValue = "NULL") val customCascadeIntervalMinutes: Int? = null,
+    @ColumnInfo(defaultValue = "NULL") val recurrenceIntervalMinutes: Int? = null,
     val calendarEventId: String?
 )
