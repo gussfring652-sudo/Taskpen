@@ -85,6 +85,11 @@ fun DashboardScreen(
     var showDrawingSheet by remember { mutableStateOf(false) }
     var showManualTaskSheet by remember { mutableStateOf(false) }
 
+    var taskToReschedule by remember { mutableStateOf<com.antakih.taskpen.data.local.entities.TaskEntity?>(null) }
+    var rescheduleDateMillis by remember { mutableStateOf<Long?>(null) }
+    var showRescheduleDatePicker by remember { mutableStateOf(false) }
+    var showRescheduleTimePicker by remember { mutableStateOf(false) }
+
     // Solicitar permiso de notificaciones (Android 13+)
     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
         val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -274,13 +279,18 @@ fun DashboardScreen(
                         if (filterState.sortByDueDate) {
                             val grouped = groupTasksChronologically(displayedTasks)
                             grouped.forEach { (header, tasksInGroup) ->
-                                item {
-                                    Text(
-                                        text = header,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(vertical = 8.dp)
-                                    )
+                                stickyHeader {
+                                    androidx.compose.material3.Surface(
+                                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.95f),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = header,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    }
                                 }
                                 items(tasksInGroup, key = { it.id }) { task ->
                                     TaskCard(
@@ -295,7 +305,12 @@ fun DashboardScreen(
                                         onRestore = { viewModel.restoreTask(task.id) },
                                         onDeletePermanently = { viewModel.permanentlyDeleteTask(task.id) },
                                         onClick = { mainPaneState = MainPaneState.TaskDetail(task) },
-                                        onLongClick = { quickViewTask = task }
+                                        onLongClick = { quickViewTask = task },
+                                        onReschedule = {
+                                            taskToReschedule = task
+                                            rescheduleDateMillis = task.dueDate ?: System.currentTimeMillis()
+                                            showRescheduleDatePicker = true
+                                        }
                                     )
                                     Spacer(Modifier.height(8.dp))
                                 }
@@ -314,7 +329,12 @@ fun DashboardScreen(
                                     onRestore = { viewModel.restoreTask(task.id) },
                                     onDeletePermanently = { viewModel.permanentlyDeleteTask(task.id) },
                                     onClick = { mainPaneState = MainPaneState.TaskDetail(task) },
-                                        onLongClick = { quickViewTask = task }
+                                    onLongClick = { quickViewTask = task },
+                                    onReschedule = {
+                                        taskToReschedule = task
+                                        rescheduleDateMillis = task.dueDate ?: System.currentTimeMillis()
+                                        showRescheduleDatePicker = true
+                                    }
                                 )
                                 Spacer(Modifier.height(8.dp))
                             }
@@ -437,6 +457,54 @@ fun DashboardScreen(
     }
 
     // Modal Bottom Sheets and Dialogs instances...
+    
+    if (showRescheduleDatePicker && taskToReschedule != null) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = rescheduleDateMillis)
+        DatePickerDialog(
+            onDismissRequest = { showRescheduleDatePicker = false; taskToReschedule = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    rescheduleDateMillis = datePickerState.selectedDateMillis
+                    showRescheduleDatePicker = false
+                    showRescheduleTimePicker = true
+                }) { Text("Siguiente") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRescheduleDatePicker = false; taskToReschedule = null }) { Text("Cancelar") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showRescheduleTimePicker && taskToReschedule != null) {
+        val cal = Calendar.getInstance()
+        if (rescheduleDateMillis != null) cal.timeInMillis = rescheduleDateMillis!!
+        val timePickerState = rememberTimePickerState(
+            initialHour = cal.get(Calendar.HOUR_OF_DAY),
+            initialMinute = cal.get(Calendar.MINUTE)
+        )
+        AlertDialog(
+            onDismissRequest = { showRescheduleTimePicker = false; taskToReschedule = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    cal.set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                    cal.set(Calendar.MINUTE, timePickerState.minute)
+                    val newDate = cal.timeInMillis
+                    
+                    val t = taskToReschedule!!
+                    viewModel.updateTaskDetails(t.id, t.title, t.description, newDate, t.categoryId, t.subcategoryId, hasSpecificTime = true)
+                    
+                    showRescheduleTimePicker = false
+                    taskToReschedule = null
+                }) { Text("Guardar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRescheduleTimePicker = false; taskToReschedule = null }) { Text("Cancelar") }
+            },
+            text = { TimePicker(state = timePickerState) }
+        )
+    }
     if (showAllCategoriesSheet) {
         AllCategoriesSheet(
             allCategories = allCategories,
@@ -554,7 +622,8 @@ fun TaskCard(
     onRestore: () -> Unit = {},
     onDeletePermanently: () -> Unit = {},
     onClick: () -> Unit = {},
-    onLongClick: () -> Unit = {}
+    onLongClick: () -> Unit = {},
+    onReschedule: () -> Unit = {}
 ) {
     val dateFormat = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
     val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
@@ -635,18 +704,18 @@ fun TaskCard(
                         
                         if (task.reminderMode == 0 && task.reminderOffsetMinutes != null) {
                             val offset = task.reminderOffsetMinutes
-                            val text = if (offset >= 60) "${offset / 60}h antes" else "${offset}m antes"
+                            val text = if (offset >= 60) "${offset / 60}h" else "${offset}m"
                             AssistChip(
                                 onClick = {},
-                                label = { Text(text, style = MaterialTheme.typography.labelSmall) }
+                                label = { Text("Pers. ($text antes)", style = MaterialTheme.typography.labelSmall) }
                             )
                         } else if (task.reminderMode == 1) {
                             if (task.customCascadeIntervalMinutes != null) {
                                 val interval = task.customCascadeIntervalMinutes
-                                val text = if (interval >= 1440) "Cada ${interval / 1440}d" else "Cada ${interval / 60}h"
+                                val text = if (interval >= 1440) "${interval / 1440}d" else "${interval / 60}h"
                                 AssistChip(
                                     onClick = {},
-                                    label = { Text("Cascada: $text", style = MaterialTheme.typography.labelSmall) }
+                                    label = { Text("Pers. (Cada $text)", style = MaterialTheme.typography.labelSmall) }
                                 )
                             } else {
                                 val prioStr = when (task.priority) {
@@ -682,6 +751,11 @@ fun TaskCard(
                     Icon(Icons.Default.DeleteForever, contentDescription = "Eliminar permanentemente", tint = Color.Red)
                 }
             } else {
+                if (isOverdue) {
+                    IconButton(onClick = onReschedule) {
+                        Icon(Icons.Default.Schedule, contentDescription = "Reprogramar")
+                    }
+                }
                 IconButton(onClick = onToggleImportant) {
                     Icon(
                         imageVector = if (task.isImportant) Icons.Default.Star else Icons.Default.StarBorder,

@@ -150,11 +150,11 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             var tagId: String? = null
             var autoCategoryId: String? = activeCategoryId
             
-            // 1. Buscar explícitamente #etiqueta o [etiqueta]
-            val explicitTagRegex = Regex("(?i)[#\\[]([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\]?")
+            // 1. Buscar explícitamente #etiqueta o [etiquetas con espacios]
+            val explicitTagRegex = Regex("(?i)(?:#([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)|\\[([^\\]]+)\\])")
             val explicitMatch = explicitTagRegex.find(extractedTitle)
             if (explicitMatch != null) {
-                val tagName = explicitMatch.groupValues[1]
+                val tagName = explicitMatch.groupValues[1].ifEmpty { explicitMatch.groupValues[2] }.trim()
                 val matchedTag = currentKnownTags.find { 
                     if (isCaseSensitive) {
                         it.fullName == tagName || it.aliases.contains(tagName)
@@ -316,15 +316,17 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
             return Triple(cleanedText.trim(), cal, 1)
         }
 
-        val dateTomorrowRegex = Regex("(?i)\\b(?:para\\s+)?mañana\\b")
+        val dateTomorrowRegex = Regex("(?i)\\b(?:(?:para|el|hasta|este|esta)\\s+)?(mañana|hoy)\\b")
         dateTomorrowRegex.find(cleanedText)?.let { match ->
             cal = Calendar.getInstance()
-            cal?.add(Calendar.DAY_OF_YEAR, 1)
+            if (match.groupValues[1].lowercase() == "mañana") {
+                cal?.add(Calendar.DAY_OF_YEAR, 1)
+            }
             cleanedText = cleanedText.replace(match.value, "")
             return Triple(cleanedText.trim(), cal, 1)
         }
 
-        val dateWeekdayRegex = Regex("(?i)\\b(?:para el|próximo|proximo|el|para|este)\\s+(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\\b")
+        val dateWeekdayRegex = Regex("(?i)\\b(?:(?:para|el|el dia|hasta|este|esta|próximo|proximo)\\s+)?(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\\b")
         dateWeekdayRegex.find(cleanedText)?.let { match ->
             cal = Calendar.getInstance()
             val targetDay = getDayOfWeek(match.groupValues[1])

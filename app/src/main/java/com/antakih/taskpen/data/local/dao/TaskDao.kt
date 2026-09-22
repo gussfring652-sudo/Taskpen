@@ -83,4 +83,7 @@ interface TaskDao {
 
     @Query("UPDATE tasks SET priority = :priority, reminderOffsetMinutes = :offset WHERE id = :taskId")
     suspend fun updateReminderSettings(taskId: String, priority: Int, offset: Int?)
+
+    @Query("UPDATE tasks SET categoryId = :newCategoryId WHERE subcategoryId = :subcategoryId")
+    suspend fun updateCategoryForTasksWithSubcategory(subcategoryId: String, newCategoryId: String?)
 }

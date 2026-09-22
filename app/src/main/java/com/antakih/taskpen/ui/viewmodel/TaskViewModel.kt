@@ -29,7 +29,7 @@ import java.util.UUID
 import javax.inject.Inject
 
 data class FilterState(
-    val sortByDueDate: Boolean = false,
+    val sortByDueDate: Boolean = true,
     val showOnlyImportant: Boolean = false,
     val searchQuery: String = "",
     val selectedCategories: Set<String> = emptySet(),
@@ -187,6 +187,7 @@ class TaskViewModel @Inject constructor(
                 semester = null
             )
             subjectDao.updateSubject(tag)
+            taskDao.updateCategoryForTasksWithSubcategory(id, categoryId)
         }
     }
 
@@ -359,12 +360,19 @@ class TaskViewModel @Inject constructor(
         }
     }
 
-    fun updateTaskDetails(id: String, title: String, description: String?, dueDate: Long?, categoryId: String?, subcategoryId: String?) {
+    fun updateTaskDetails(id: String, title: String, description: String?, dueDate: Long?, categoryId: String?, subcategoryId: String?, hasSpecificTime: Boolean? = null) {
         viewModelScope.launch {
             val allTasks = taskDao.getAllActiveTasks().first()
             val task = allTasks.find { it.id == id }
             if (task != null) {
-                val updatedTask = task.copy(title = title, description = description, dueDate = dueDate, categoryId = categoryId, subcategoryId = subcategoryId)
+                val updatedTask = task.copy(
+                    title = title, 
+                    description = description, 
+                    dueDate = dueDate, 
+                    categoryId = categoryId, 
+                    subcategoryId = subcategoryId,
+                    hasSpecificTime = hasSpecificTime ?: task.hasSpecificTime
+                )
                 taskDao.insertTask(updatedTask)
                 // Reprogramar alarma si la tarea tiene dueDate
                 if (dueDate != null && !updatedTask.isCompleted) {
