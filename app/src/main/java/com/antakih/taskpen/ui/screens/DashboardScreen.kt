@@ -964,6 +964,17 @@ fun ManualTaskSheet(
     val dateString = dueDateMillis?.let { java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(it)) } ?: "Sin fecha"
     val timeString = if (hasTime && dueDateMillis != null) java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(dueDateMillis!!)) else "Sin hora"
 
+    val defaultPriority by viewModel.defaultTaskPriority.collectAsState()
+    var selectedPriority by androidx.compose.runtime.remember(defaultPriority) { androidx.compose.runtime.mutableIntStateOf(defaultPriority) }
+    var selectedReminderMode by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(1) } // 1 = Cascade por defecto
+    var customOffsetValue by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
+    var customCascadeValue by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
+    var customRecurrenceValue by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
+    var recurrenceMaxOccurrences by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
+    var recurrenceEndDate by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
+    var recurrenceEndType by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var showRecurrenceDatePicker by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(16.dp).fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
             Text("Crear Tarea", style = MaterialTheme.typography.titleLarge)
@@ -1034,13 +1045,6 @@ fun ManualTaskSheet(
                 Text("Marcar como Importante (★)")
             }
             
-            val defaultPriority by viewModel.defaultTaskPriority.collectAsState()
-            var selectedPriority by androidx.compose.runtime.remember(defaultPriority) { androidx.compose.runtime.mutableIntStateOf(defaultPriority) }
-            var selectedReminderMode by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(1) } // 1 = Cascade por defecto
-            var customOffsetValue by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
-            var customCascadeValue by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
-            var customRecurrenceValue by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
-
             if (dueDateMillis != null) {
                 Spacer(Modifier.height(8.dp))
                 Text("Modo de Recordatorio:", style = MaterialTheme.typography.titleMedium)
@@ -1098,6 +1102,42 @@ fun ManualTaskSheet(
                     isCascadeMode = true,
                     onOffsetChanged = { customRecurrenceValue = it }
                 )
+                
+                if (customRecurrenceValue != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Finalizar repetición:", style = MaterialTheme.typography.bodyMedium)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = recurrenceEndType == 0, onClick = { recurrenceEndType = 0; recurrenceMaxOccurrences = null; recurrenceEndDate = null }, label = { Text("Nunca") })
+                        FilterChip(selected = recurrenceEndType == 1, onClick = { recurrenceEndType = 1; recurrenceMaxOccurrences = recurrenceMaxOccurrences ?: 5; recurrenceEndDate = null }, label = { Text("N veces") })
+                        FilterChip(selected = recurrenceEndType == 2, onClick = { recurrenceEndType = 2; recurrenceEndDate = recurrenceEndDate ?: (System.currentTimeMillis() + 86400000L); recurrenceMaxOccurrences = null }, label = { Text("En fecha") })
+                    }
+                    if (recurrenceEndType == 1) {
+                        OutlinedTextField(
+                            value = recurrenceMaxOccurrences?.toString() ?: "",
+                            onValueChange = { recurrenceMaxOccurrences = it.toIntOrNull() },
+                            label = { Text("Número de repeticiones restantes") },
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else if (recurrenceEndType == 2) {
+                        val endStr = recurrenceEndDate?.let { java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(it)) } ?: "Seleccionar fecha"
+                        Box(modifier = Modifier.fillMaxWidth().clickable { showRecurrenceDatePicker = true }) {
+                            OutlinedTextField(
+                                value = endStr,
+                                onValueChange = {},
+                                readOnly = true,
+                                enabled = false,
+                                colors = TextFieldDefaults.colors(
+                                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                    disabledContainerColor = Color.Transparent,
+                                    disabledIndicatorColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                label = { Text("Fecha límite") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
             }
             
             Spacer(Modifier.height(16.dp))
@@ -1122,6 +1162,8 @@ fun ManualTaskSheet(
                             reminderOffsetMinutes = customOffsetValue,
                             customCascadeIntervalMinutes = customCascadeValue,
                             recurrenceIntervalMinutes = customRecurrenceValue,
+                            recurrenceMaxOccurrences = recurrenceMaxOccurrences,
+                            recurrenceEndDate = recurrenceEndDate,
                             snoozeUntil = null,
                             calendarEventId = null
                         )
@@ -1178,6 +1220,24 @@ fun ManualTaskSheet(
             },
             text = { TimePicker(state = timePickerState) }
         )
+    }
+
+    if (showRecurrenceDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = recurrenceEndDate ?: (System.currentTimeMillis() + 86400000L))
+        DatePickerDialog(
+            onDismissRequest = { showRecurrenceDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    recurrenceEndDate = datePickerState.selectedDateMillis
+                    showRecurrenceDatePicker = false
+                }) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRecurrenceDatePicker = false }) { Text("Cancelar") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
 }
 

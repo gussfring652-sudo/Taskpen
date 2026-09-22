@@ -33,5 +33,7 @@ data class TaskEntity(
     @ColumnInfo(defaultValue = "NULL") val snoozeUntil: Long? = null,
     @ColumnInfo(defaultValue = "NULL") val customCascadeIntervalMinutes: Int? = null,
     @ColumnInfo(defaultValue = "NULL") val recurrenceIntervalMinutes: Int? = null,
+    @ColumnInfo(defaultValue = "NULL") val recurrenceMaxOccurrences: Int? = null,
+    @ColumnInfo(defaultValue = "NULL") val recurrenceEndDate: Long? = null,
     val calendarEventId: String?
 )

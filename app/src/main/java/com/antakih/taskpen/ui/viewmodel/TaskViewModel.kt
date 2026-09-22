@@ -278,21 +278,40 @@ class TaskViewModel @Inject constructor(
                     if (task.recurrenceIntervalMinutes != null && task.dueDate != null) {
                         // It's a recurring task
                         val nextDueDate = task.dueDate + (task.recurrenceIntervalMinutes * 60_000L)
-                        val nextTask = task.copy(
-                            id = UUID.randomUUID().toString(),
-                            dueDate = nextDueDate,
-                            createdAt = System.currentTimeMillis(),
-                            isCompleted = false
-                        )
-                        
+                        var shouldClone = true
+                        var nextOccurrences = task.recurrenceMaxOccurrences
+
+                        if (task.recurrenceMaxOccurrences != null) {
+                            if (task.recurrenceMaxOccurrences <= 1) {
+                                shouldClone = false
+                            } else {
+                                nextOccurrences = task.recurrenceMaxOccurrences - 1
+                            }
+                        }
+
+                        if (task.recurrenceEndDate != null && nextDueDate > task.recurrenceEndDate) {
+                            shouldClone = false
+                        }
+
                         val completedOriginal = task.copy(
                             isCompleted = true,
-                            recurrenceIntervalMinutes = null // Clear recurrence so it doesn't clone again if uncompleted
+                            recurrenceIntervalMinutes = null,
+                            recurrenceMaxOccurrences = null,
+                            recurrenceEndDate = null
                         )
-                        
                         taskDao.insertTask(completedOriginal)
-                        taskDao.insertTask(nextTask)
-                        taskAlarmScheduler.scheduleAlarm(nextTask)
+
+                        if (shouldClone) {
+                            val nextTask = task.copy(
+                                id = UUID.randomUUID().toString(),
+                                dueDate = nextDueDate,
+                                createdAt = System.currentTimeMillis(),
+                                isCompleted = false,
+                                recurrenceMaxOccurrences = nextOccurrences
+                            )
+                            taskDao.insertTask(nextTask)
+                            taskAlarmScheduler.scheduleAlarm(nextTask)
+                        }
                     } else {
                         // Normal task
                         taskDao.insertTask(task.copy(isCompleted = true))
@@ -357,7 +376,7 @@ class TaskViewModel @Inject constructor(
         }
     }
 
-    fun updateTaskReminder(taskId: String, priority: Int, offsetMinutes: Int?, reminderMode: Int, customCascadeInterval: Int? = null, recurrenceInterval: Int? = null) {
+    fun updateTaskReminder(taskId: String, priority: Int, offsetMinutes: Int?, reminderMode: Int, customCascadeInterval: Int? = null, recurrenceInterval: Int? = null, recurrenceMaxOccurrences: Int? = null, recurrenceEndDate: Long? = null) {
         viewModelScope.launch {
             try {
                 val task = taskDao.getTaskById(taskId)
@@ -367,7 +386,9 @@ class TaskViewModel @Inject constructor(
                         reminderOffsetMinutes = offsetMinutes,
                         reminderMode = reminderMode,
                         customCascadeIntervalMinutes = customCascadeInterval,
-                        recurrenceIntervalMinutes = recurrenceInterval
+                        recurrenceIntervalMinutes = recurrenceInterval,
+                        recurrenceMaxOccurrences = recurrenceMaxOccurrences,
+                        recurrenceEndDate = recurrenceEndDate
                     )
                     taskDao.insertTask(updatedTask)
                     
