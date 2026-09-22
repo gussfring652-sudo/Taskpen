@@ -98,6 +98,15 @@ class TaskViewModel @Inject constructor(
         .catch { emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val defaultTaskPriority: StateFlow<Int> = settingsManager.defaultTaskPriority
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
+
+    fun setDefaultTaskPriority(priority: Int) {
+        viewModelScope.launch {
+            settingsManager.setDefaultTaskPriority(priority)
+        }
+    }
+
     val allTags: StateFlow<List<SubjectEntity>> = subjectDao.getAllSubjectsOnceFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -206,7 +215,8 @@ class TaskViewModel @Inject constructor(
                         linesWithX = recognizedLines,
                         activeCategoryId = currentCategory,
                         existingTags = existingTags,
-                        isCaseSensitive = isCaseSensitiveTags.value
+                        isCaseSensitive = isCaseSensitiveTags.value,
+                        defaultPriority = defaultTaskPriority.value
                     )
                     // Guardar nuevas etiquetas encontradas explícitamente
                     result.newTags.forEach { subjectDao.insertSubject(it) }
@@ -232,7 +242,8 @@ class TaskViewModel @Inject constructor(
                     linesWithX = lines,
                     activeCategoryId = currentCategory,
                     existingTags = existingTags,
-                    isCaseSensitive = isCaseSensitiveTags.value
+                    isCaseSensitive = isCaseSensitiveTags.value,
+                    defaultPriority = defaultTaskPriority.value
                 )
                 // Guardar nuevas etiquetas encontradas explícitamente
                 result.newTags.forEach { subjectDao.insertSubject(it) }
@@ -321,7 +332,7 @@ class TaskViewModel @Inject constructor(
         }
     }
 
-    fun updateTaskReminder(taskId: String, priority: Int, offsetMinutes: Int?, reminderMode: Int) {
+    fun updateTaskReminder(taskId: String, priority: Int, offsetMinutes: Int?, reminderMode: Int, customCascadeInterval: Int? = null) {
         viewModelScope.launch {
             try {
                 val task = taskDao.getTaskById(taskId)
@@ -329,7 +340,8 @@ class TaskViewModel @Inject constructor(
                     val updatedTask = task.copy(
                         priority = priority,
                         reminderOffsetMinutes = offsetMinutes,
-                        reminderMode = reminderMode
+                        reminderMode = reminderMode,
+                        customCascadeIntervalMinutes = customCascadeInterval
                     )
                     taskDao.insertTask(updatedTask)
                     

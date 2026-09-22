@@ -487,6 +487,7 @@ fun DashboardScreen(
     
     if (showManualTaskSheet) {
         ManualTaskSheet(
+            viewModel = viewModel,
             allCategories = allCategories,
             allTags = allTags,
             initialCategoryId = (activeContext as? ViewContext.Category)?.categoryId,
@@ -550,10 +551,15 @@ fun TaskCard(
     } ?: "Sin fecha"
 
     val assignedTag = tags.find { it.id == task.subcategoryId }
+    
+    val isOverdue = task.dueDate != null && task.dueDate < System.currentTimeMillis() && !task.isCompleted && task.snoozeUntil == null
 
     Card(
         modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOverdue) Color.Red.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
         Row(
             modifier = Modifier
@@ -578,7 +584,11 @@ fun TaskCard(
                         }
                         Spacer(modifier = Modifier.width(6.dp))
                     }
-                    Text(text = task.title, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = task.title, 
+                        style = MaterialTheme.typography.titleMedium,
+                        textDecoration = if (task.isCompleted) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+                    )
                 }
                 if (assignedTag != null) {
                     androidx.compose.material3.Surface(
@@ -598,8 +608,46 @@ fun TaskCard(
                 Text(
                     text = "Vence: $dateString",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isOverdue) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                
+                if (task.dueDate != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        AssistChip(
+                            onClick = {},
+                            label = { Text(if (task.reminderMode == 0) "Puntual" else "Deadline", style = MaterialTheme.typography.labelSmall) }
+                        )
+                        
+                        if (task.reminderMode == 0 && task.reminderOffsetMinutes != null) {
+                            val offset = task.reminderOffsetMinutes
+                            val text = if (offset >= 60) "${offset / 60}h antes" else "${offset}m antes"
+                            AssistChip(
+                                onClick = {},
+                                label = { Text(text, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        } else if (task.reminderMode == 1) {
+                            if (task.customCascadeIntervalMinutes != null) {
+                                val interval = task.customCascadeIntervalMinutes
+                                val text = if (interval >= 1440) "Cada ${interval / 1440}d" else "Cada ${interval / 60}h"
+                                AssistChip(
+                                    onClick = {},
+                                    label = { Text("Cascada: $text", style = MaterialTheme.typography.labelSmall) }
+                                )
+                            } else {
+                                val prioStr = when (task.priority) {
+                                    2 -> "Alta"
+                                    1 -> "Media"
+                                    else -> "Baja"
+                                }
+                                AssistChip(
+                                    onClick = {},
+                                    label = { Text("Prioridad: $prioStr", style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+                    }
+                }
             }
             
             if (isTrashContext) {
@@ -867,6 +915,7 @@ fun FilterDialog(
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ManualTaskSheet(
+    viewModel: com.antakih.taskpen.ui.viewmodel.TaskViewModel,
     allCategories: List<CategoryEntity>,
     allTags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
     initialCategoryId: String?,
@@ -961,23 +1010,13 @@ fun ManualTaskSheet(
                 Text("Marcar como Importante (★)")
             }
             
-            var selectedPriority by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+            val defaultPriority by viewModel.defaultTaskPriority.collectAsState()
+            var selectedPriority by androidx.compose.runtime.remember(defaultPriority) { androidx.compose.runtime.mutableIntStateOf(defaultPriority) }
             var selectedReminderMode by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(1) } // 1 = Cascade por defecto
-            
+            var customOffsetValue by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
+            var customCascadeValue by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Int?>(null) }
+
             if (dueDateMillis != null) {
-                Spacer(Modifier.height(8.dp))
-                Text("Prioridad:", style = MaterialTheme.typography.titleMedium)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Baja", "Media", "Alta").forEachIndexed { index, label ->
-                        FilterChip(
-                            selected = selectedPriority == index,
-                            onClick = { selectedPriority = index },
-                            label = { Text(label) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-                
                 Spacer(Modifier.height(8.dp))
                 Text("Modo de Recordatorio:", style = MaterialTheme.typography.titleMedium)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -992,6 +1031,37 @@ fun ManualTaskSheet(
                         onClick = { selectedReminderMode = 1 },
                         label = { Text("Cascada (Deadline)") },
                         modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+                if (selectedReminderMode == 1) {
+                    com.antakih.taskpen.ui.components.ReminderOffsetPicker(
+                        label = "Personalizar intervalo (opcional)",
+                        initialValueMinutes = customCascadeValue,
+                        isCascadeMode = true,
+                        onOffsetChanged = { customCascadeValue = it }
+                    )
+                    
+                    if (customCascadeValue == null) {
+                        Text("Prioridad (define la anticipación automática):", style = MaterialTheme.typography.titleMedium)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("Baja", "Media", "Alta").forEachIndexed { index, label ->
+                                FilterChip(
+                                    selected = selectedPriority == index,
+                                    onClick = { selectedPriority = index },
+                                    label = { Text(label) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    com.antakih.taskpen.ui.components.ReminderOffsetPicker(
+                        label = "Avisar minutos/horas antes",
+                        initialValueMinutes = customOffsetValue,
+                        isCascadeMode = false,
+                        onOffsetChanged = { customOffsetValue = it }
                     )
                 }
             }
@@ -1015,7 +1085,8 @@ fun ManualTaskSheet(
                             isDeleted = false,
                             priority = selectedPriority,
                             reminderMode = selectedReminderMode,
-                            reminderOffsetMinutes = null,
+                            reminderOffsetMinutes = customOffsetValue,
+                            customCascadeIntervalMinutes = customCascadeValue,
                             snoozeUntil = null,
                             calendarEventId = null
                         )

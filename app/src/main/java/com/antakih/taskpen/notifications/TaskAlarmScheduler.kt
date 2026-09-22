@@ -127,17 +127,22 @@ class TaskAlarmScheduler @Inject constructor(
 
         val dueDate = task.dueDate ?: return null
 
-        // Prioridad 2: Offset manual del usuario
-        task.reminderOffsetMinutes?.let { offset ->
-            val manualTrigger = dueDate - (offset * MINUTE)
-            return if (manualTrigger > now) manualTrigger else null
-        }
-
-        // Prioridad 3: Cascada dinámica o tiempo exacto
-        return if (task.reminderMode == 1) {
-            calculateNextCascadePoint(task.priority, dueDate, now)
-        } else {
-            if (dueDate > now) dueDate else null
+        if (task.reminderMode == 0) { // Exact
+            val offsetMillis = (task.reminderOffsetMinutes ?: 0) * 60_000L
+            val offsetTime = dueDate - offsetMillis
+            return if (now < offsetTime) {
+                offsetTime // Return offset time
+            } else if (now < dueDate) {
+                dueDate // Return exact time if offset already passed
+            } else {
+                null
+            }
+        } else { // Cascade
+            task.customCascadeIntervalMinutes?.let { interval ->
+                val nextPoint = now + (interval * 60_000L)
+                return if (nextPoint < dueDate) nextPoint else dueDate
+            }
+            return calculateNextCascadePoint(task.priority, dueDate, now)
         }
     }
 

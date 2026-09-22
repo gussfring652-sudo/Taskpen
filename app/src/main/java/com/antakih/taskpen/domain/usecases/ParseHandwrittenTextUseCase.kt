@@ -20,7 +20,8 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
         linesWithX: List<Pair<String, Float>>,
         activeCategoryId: String? = null,
         existingTags: List<SubjectEntity> = emptyList(),
-        isCaseSensitive: Boolean = false
+        isCaseSensitive: Boolean = false,
+        defaultPriority: Int = 1
     ): Result {
 
         val processedLines = mutableListOf<Pair<String, Float>>()
@@ -220,9 +221,10 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
                 isCompleted = false,
                 isImportant = isImportant,
                 isDeleted = false,
-                priority = 0,
+                priority = defaultPriority,
                 reminderMode = reminderMode,
                 reminderOffsetMinutes = null,
+                customCascadeIntervalMinutes = null,
                 snoozeUntil = null,
                 calendarEventId = null
             )

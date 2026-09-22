@@ -67,25 +67,70 @@ fun SettingsScreen(
             )
 
             Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Sensibilidad a mayúsculas", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "Requiere coincidencia exacta en etiquetas.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Sensibilidad a mayúsculas", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Requiere coincidencia exacta en etiquetas.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                        Switch(
+                            checked = isCaseSensitive,
+                            onCheckedChange = { viewModel.setCaseSensitiveTags(it) }
                         )
                     }
-                    Switch(
-                        checked = isCaseSensitive,
-                        onCheckedChange = { viewModel.setCaseSensitiveTags(it) }
-                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                    val defaultPriority by viewModel.defaultTaskPriority.collectAsState()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Prioridad por defecto", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Para tareas sin prioridad explícita",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                        
+                        var expanded by remember { mutableStateOf(false) }
+                        val priorities = listOf("Baja", "Media", "Alta")
+                        
+                        Box {
+                            TextButton(onClick = { expanded = true }) {
+                                Text(priorities[defaultPriority])
+                            }
+                            DropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                priorities.forEachIndexed { index, label ->
+                                    DropdownMenuItem(
+                                        text = { Text(label) },
+                                        onClick = {
+                                            viewModel.setDefaultTaskPriority(index)
+                                            expanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

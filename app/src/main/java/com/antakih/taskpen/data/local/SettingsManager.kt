@@ -22,6 +22,7 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
         val MORNING_SUMMARY_MINUTE = intPreferencesKey("morning_summary_minute")
         val EVENING_SUMMARY_HOUR = intPreferencesKey("evening_summary_hour")
         val EVENING_SUMMARY_MINUTE = intPreferencesKey("evening_summary_minute")
+        val DEFAULT_TASK_PRIORITY = intPreferencesKey("default_task_priority")
     }
 
     val isCaseSensitiveTags: StateFlow<Boolean> = context.dataStore.data
@@ -32,6 +33,7 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
     val morningSummaryMinute: Flow<Int> = context.dataStore.data.map { it[Keys.MORNING_SUMMARY_MINUTE] ?: 0 }
     val eveningSummaryHour: Flow<Int> = context.dataStore.data.map { it[Keys.EVENING_SUMMARY_HOUR] ?: 21 }
     val eveningSummaryMinute: Flow<Int> = context.dataStore.data.map { it[Keys.EVENING_SUMMARY_MINUTE] ?: 0 }
+    val defaultTaskPriority: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_PRIORITY] ?: 1 }
 
     fun setCaseSensitiveTags(value: Boolean) {
         scope.launch {
@@ -50,6 +52,12 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
         context.dataStore.edit {
             it[Keys.EVENING_SUMMARY_HOUR] = hour
             it[Keys.EVENING_SUMMARY_MINUTE] = minute
+        }
+    }
+
+    suspend fun setDefaultTaskPriority(priority: Int) {
+        context.dataStore.edit {
+            it[Keys.DEFAULT_TASK_PRIORITY] = priority
         }
     }
 }

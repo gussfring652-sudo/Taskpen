@@ -230,8 +230,8 @@ fun TaskDetailScreen(
                 onSave = { title, desc, date, catId, tagId ->
                     viewModel.updateTaskDetails(task.id, title, desc, date, catId, tagId)
                 },
-                onSaveReminder = { priority, offsetMinutes, reminderMode ->
-                    viewModel.updateTaskReminder(task.id, priority, offsetMinutes, reminderMode)
+                onSaveReminder = { priority, offsetMinutes, reminderMode, customCascadeInterval ->
+                    viewModel.updateTaskReminder(task.id, priority, offsetMinutes, reminderMode, customCascadeInterval)
                 }
             )
         }
@@ -270,7 +270,7 @@ fun EditTaskDialog(
     allTags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
     onDismiss: () -> Unit,
     onSave: (title: String, desc: String, dueDate: Long?, categoryId: String?, subcategoryId: String?) -> Unit,
-    onSaveReminder: ((priority: Int, offsetMinutes: Int?, reminderMode: Int) -> Unit)? = null
+    onSaveReminder: ((priority: Int, offsetMinutes: Int?, reminderMode: Int, customCascadeInterval: Int?) -> Unit)? = null
 ) {
     var title by remember { mutableStateOf(task.title) }
     var description by remember { mutableStateOf(task.description ?: "") }
@@ -279,8 +279,8 @@ fun EditTaskDialog(
     var selectedTagId by remember { mutableStateOf(task.subcategoryId) }
     var selectedPriority by remember { mutableIntStateOf(task.priority) }
     var selectedReminderMode by remember { mutableIntStateOf(task.reminderMode) }
-    var useCustomOffset by remember { mutableStateOf(task.reminderOffsetMinutes != null) }
-    var customOffsetText by remember { mutableStateOf(task.reminderOffsetMinutes?.toString() ?: "") }
+    var customOffsetValue by remember { mutableStateOf(task.reminderOffsetMinutes) }
+    var customCascadeValue by remember { mutableStateOf(task.customCascadeIntervalMinutes) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -391,32 +391,27 @@ fun EditTaskDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        com.antakih.taskpen.ui.components.ReminderOffsetPicker(
+                            label = "Personalizar intervalo de cascada",
+                            initialValueMinutes = task.customCascadeIntervalMinutes,
+                            isCascadeMode = true,
+                            onOffsetChanged = { customCascadeValue = it }
+                        )
                     } else {
                         Text(
                             text = "Sonará exactamente en el momento de vencimiento.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = useCustomOffset,
-                            onCheckedChange = { useCustomOffset = it }
-                        )
-                        Text("Personalizar anticipación", style = MaterialTheme.typography.bodyMedium)
-                    }
-
-                    if (useCustomOffset) {
-                        OutlinedTextField(
-                            value = customOffsetText,
-                            onValueChange = { newValue ->
-                                customOffsetText = newValue.filter { it.isDigit() }
-                            },
-                            label = { Text("Minutos antes del vencimiento") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        com.antakih.taskpen.ui.components.ReminderOffsetPicker(
+                            label = "Avisar minutos/horas antes",
+                            initialValueMinutes = task.reminderOffsetMinutes,
+                            isCascadeMode = false,
+                            onOffsetChanged = { customOffsetValue = it }
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
@@ -494,8 +489,7 @@ fun EditTaskDialog(
                     Button(onClick = {
                         if (title.isNotBlank()) {
                             onSave(title.trim(), description.trim(), dueDateMillis, selectedCategoryId, selectedTagId)
-                            val finalOffset = if (useCustomOffset) customOffsetText.toIntOrNull() else null
-                            onSaveReminder?.invoke(selectedPriority, finalOffset, selectedReminderMode)
+                            onSaveReminder?.invoke(selectedPriority, customOffsetValue, selectedReminderMode, customCascadeValue)
                             onDismiss()
                         }
                     }) { Text("Guardar") }
