@@ -220,8 +220,24 @@ fun DashboardScreen(
             },
             containerColor = if (isLandscape) Color.Transparent else MaterialTheme.colorScheme.background
         ) { padding ->
-            val actualPadding = if (isLandscape) PaddingValues(bottom = padding.calculateBottomPadding(), top = 16.dp, start = 16.dp, end = 16.dp) else padding
+            val actualPadding = if (isLandscape) PaddingValues(
+                bottom = padding.calculateBottomPadding(), 
+                top = padding.calculateTopPadding() + 16.dp, 
+                start = 16.dp, 
+                end = 16.dp
+            ) else padding
+            
             Column(modifier = Modifier.padding(actualPadding).fillMaxSize()) {
+                if (isLandscape) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+                
                 if (!isLandscape && recentCategories.isNotEmpty()) {
                     LazyRow(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
