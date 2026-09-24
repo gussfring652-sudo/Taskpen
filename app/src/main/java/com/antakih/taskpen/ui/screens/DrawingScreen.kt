@@ -22,6 +22,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
 import com.google.mlkit.vision.digitalink.Ink
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -91,12 +93,12 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
             IconButton(
                 onClick = { if (historyIndex > 0) historyIndex-- },
                 enabled = historyIndex > 0
-            ) { Icon(androidx.compose.material.icons.Icons.Default.ArrowBack, contentDescription = "Deshacer") }
+            ) { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Deshacer") }
 
             IconButton(
                 onClick = { if (historyIndex < strokesHistory.size - 1) historyIndex++ },
                 enabled = historyIndex < strokesHistory.size - 1
-            ) { Icon(androidx.compose.material.icons.Icons.Default.ArrowForward, contentDescription = "Rehacer") }
+            ) { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Rehacer") }
 
             Button(
                 onClick = { isEraserMode = false },
