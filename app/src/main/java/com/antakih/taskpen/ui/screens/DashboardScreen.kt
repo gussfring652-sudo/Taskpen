@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Search
@@ -193,98 +194,103 @@ fun DashboardScreen(
             is MainPaneState.TaskList -> {
         Scaffold(
             topBar = {
-                if (!isLandscape) {
-                    if (isSelectionMode) {
-                        TopAppBar(
-                            title = { Text("${selectedTasks.size} seleccionadas") },
-                            navigationIcon = {
-                                IconButton(onClick = { isSelectionMode = false; selectedTasks = emptySet() }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Cancelar")
-                                }
-                            },
-                            actions = {
-                                val allTaskIds = displayedTasks.map { it.id }.toSet()
-                                val allSelected = selectedTasks.size == displayedTasks.size && displayedTasks.isNotEmpty()
+                if (isSelectionMode) {
+                    TopAppBar(
+                        title = { Text("${selectedTasks.size} seleccionadas") },
+                        navigationIcon = {
+                            IconButton(onClick = { isSelectionMode = false; selectedTasks = emptySet() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancelar")
+                            }
+                        },
+                        actions = {
+                            val allTaskIds = displayedTasks.map { it.id }.toSet()
+                            val allSelected = selectedTasks.size == displayedTasks.size && displayedTasks.isNotEmpty()
+                            IconButton(onClick = {
+                                if (allSelected) selectedTasks = emptySet() else selectedTasks = allTaskIds
+                            }) {
+                                Icon(if (allSelected) Icons.Default.Deselect else Icons.Default.SelectAll, contentDescription = "Seleccionar todo")
+                            }
+                            if (activeContext is ViewContext.Trash) {
                                 IconButton(onClick = {
-                                    if (allSelected) selectedTasks = emptySet() else selectedTasks = allTaskIds
+                                    selectedTasks.forEach { viewModel.restoreTask(it) }
+                                    isSelectionMode = false
+                                    selectedTasks = emptySet()
                                 }) {
-                                    Icon(if (allSelected) Icons.Default.Deselect else Icons.Default.SelectAll, contentDescription = "Seleccionar todo")
+                                    Icon(Icons.Default.Restore, contentDescription = "Restaurar seleccionadas")
                                 }
-                                if (activeContext is ViewContext.Trash) {
-                                    IconButton(onClick = {
-                                        selectedTasks.forEach { viewModel.restoreTask(it) }
-                                        isSelectionMode = false
-                                        selectedTasks = emptySet()
-                                    }) {
-                                        Icon(Icons.Default.Restore, contentDescription = "Restaurar seleccionadas")
-                                    }
-                                    IconButton(onClick = {
-                                        val selectedList = selectedTasks.toList()
-                                        if (confirmTrashDelete) {
-                                            trashConfirmAction = {
-                                                selectedList.forEach { viewModel.permanentlyDeleteTask(it) }
-                                                isSelectionMode = false
-                                                selectedTasks = emptySet()
-                                            }
-                                            showTrashConfirmDialog = true
-                                        } else {
+                                IconButton(onClick = {
+                                    val selectedList = selectedTasks.toList()
+                                    if (confirmTrashDelete) {
+                                        trashConfirmAction = {
                                             selectedList.forEach { viewModel.permanentlyDeleteTask(it) }
                                             isSelectionMode = false
                                             selectedTasks = emptySet()
                                         }
-                                    }) {
-                                        Icon(Icons.Default.DeleteForever, contentDescription = "Eliminar permanentemente", tint = Color.Red)
-                                    }
-                                } else {
-                                    IconButton(onClick = {
-                                        selectedTasks.forEach { viewModel.completeTask(it) }
+                                        showTrashConfirmDialog = true
+                                    } else {
+                                        selectedList.forEach { viewModel.permanentlyDeleteTask(it) }
                                         isSelectionMode = false
                                         selectedTasks = emptySet()
-                                    }) {
-                                        Icon(Icons.Default.DoneAll, contentDescription = "Completar seleccionadas")
                                     }
-                                    IconButton(onClick = {
-                                        selectedTasks.forEach { viewModel.moveToTrash(it) }
-                                        isSelectionMode = false
-                                        selectedTasks = emptySet()
-                                    }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar seleccionadas")
+                                }) {
+                                    Icon(Icons.Default.DeleteForever, contentDescription = "Eliminar permanentemente", tint = Color.Red)
+                                }
+                            } else {
+                                IconButton(onClick = {
+                                    selectedTasks.forEach { viewModel.completeTask(it) }
+                                    isSelectionMode = false
+                                    selectedTasks = emptySet()
+                                }) {
+                                    Icon(Icons.Default.DoneAll, contentDescription = "Completar seleccionadas")
+                                }
+                                IconButton(onClick = {
+                                    selectedTasks.forEach { viewModel.moveToTrash(it) }
+                                    isSelectionMode = false
+                                    selectedTasks = emptySet()
+                                }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Eliminar seleccionadas")
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                    )
+                } else if (!isLandscape) {
+                    TopAppBar(
+                        title = { Text(title, fontWeight = FontWeight.Bold) },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menú")
+                            }
+                        },
+                        actions = {
+                            if (activeContext is ViewContext.Trash && deletedTasks.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    if (confirmTrashDelete) {
+                                        trashConfirmAction = { deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) } }
+                                        showTrashConfirmDialog = true
+                                    } else {
+                                        deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) }
                                     }
+                                }) {
+                                    Icon(Icons.Default.DeleteSweep, contentDescription = "Vaciar papelera", tint = Color.Red)
                                 }
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                        )
-                    } else {
-                        TopAppBar(
-                            title = { Text(title, fontWeight = FontWeight.Bold) },
-                            navigationIcon = {
-                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                    Icon(Icons.Default.Menu, contentDescription = "Menú")
+                            } else if (activeContext !is ViewContext.Trash && displayedTasks.isNotEmpty()) {
+                                IconButton(onClick = { 
+                                    isSelectionMode = true
+                                    selectedTasks = displayedTasks.map { it.id }.toSet()
+                                }) {
+                                    Icon(Icons.Default.SelectAll, contentDescription = "Seleccionar todas")
                                 }
-                            },
-                            actions = {
-                                if (activeContext is ViewContext.Trash && deletedTasks.isNotEmpty()) {
-                                    IconButton(onClick = {
-                                        if (confirmTrashDelete) {
-                                            trashConfirmAction = { deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) } }
-                                            showTrashConfirmDialog = true
-                                        } else {
-                                            deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) }
-                                        }
-                                    }) {
-                                        Icon(Icons.Default.DeleteSweep, contentDescription = "Vaciar papelera", tint = Color.Red)
-                                    }
-                                }
-                                IconButton(onClick = { showFilterDialog = true }) {
-                                    Icon(Icons.Default.FilterList, contentDescription = "Filtros")
-                                }
-                                IconButton(onClick = { showTagsDialog = true }) {
-                                    Icon(Icons.Default.Label, contentDescription = "Etiquetas")
-                                }
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                        )
-                    }
+                            }
+                            IconButton(onClick = { showFilterDialog = true }) {
+                                Icon(Icons.Default.FilterList, contentDescription = "Filtros")
+                            }
+                            IconButton(onClick = { showTagsDialog = true }) {
+                                Icon(Icons.AutoMirrored.Filled.Label, contentDescription = "Etiquetas")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    )
                 }
             },
             bottomBar = {
@@ -340,13 +346,45 @@ fun DashboardScreen(
                         color = MaterialTheme.colorScheme.background.copy(alpha = 0.95f),
                         modifier = Modifier.fillMaxWidth().padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
                     ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Row {
+                                if (activeContext is ViewContext.Trash && deletedTasks.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        if (confirmTrashDelete) {
+                                            trashConfirmAction = { deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) } }
+                                            showTrashConfirmDialog = true
+                                        } else {
+                                            deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) }
+                                        }
+                                    }) {
+                                        Icon(Icons.Default.DeleteSweep, contentDescription = "Vaciar papelera", tint = Color.Red)
+                                    }
+                                } else if (activeContext !is ViewContext.Trash && displayedTasks.isNotEmpty()) {
+                                    IconButton(onClick = { 
+                                        isSelectionMode = true
+                                        selectedTasks = displayedTasks.map { it.id }.toSet()
+                                    }) {
+                                        Icon(Icons.Default.SelectAll, contentDescription = "Seleccionar todas")
+                                    }
+                                }
+                                IconButton(onClick = { showFilterDialog = true }) {
+                                    Icon(Icons.Default.FilterList, contentDescription = "Filtros")
+                                }
+                                IconButton(onClick = { showTagsDialog = true }) {
+                                    Icon(Icons.AutoMirrored.Filled.Label, contentDescription = "Etiquetas")
+                                }
+                            }
+                        }
                     }
                 }
                 
@@ -868,20 +906,22 @@ fun TaskCard(
     
     val isOverdue = task.dueDate != null && task.dueDate < System.currentTimeMillis() && !task.isCompleted && task.snoozeUntil == null
 
-    var offsetX by remember { mutableStateOf(0f) }
+    val coroutineScope = rememberCoroutineScope()
+    val offsetX = remember { androidx.compose.animation.core.Animatable(0f) }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .offset { androidx.compose.ui.unit.IntOffset(offsetX.value.toInt().coerceAtLeast(0), 0) }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
-                        if (offsetX > 100f) onSwipeRight()
-                        offsetX = 0f
+                        if (offsetX.value > 100f) onSwipeRight()
+                        coroutineScope.launch { offsetX.animateTo(0f) }
                     },
-                    onDragCancel = { offsetX = 0f },
+                    onDragCancel = { coroutineScope.launch { offsetX.animateTo(0f) } },
                     onHorizontalDrag = { _, dragAmount ->
-                        offsetX += dragAmount
+                        coroutineScope.launch { offsetX.snapTo(offsetX.value + dragAmount) }
                     }
                 )
             }
