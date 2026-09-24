@@ -51,9 +51,20 @@ private fun strokeIntersects(stroke: StrokeState, eraserPos: Offset, eraserRadiu
 
 @Composable
 fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
-    // Memoria de trazos para renderizar en pantalla
-    var strokes by remember { mutableStateOf(emptyList<StrokeState>()) }
+    // Memoria de trazos para renderizar en pantalla e historial para Undo/Redo
+    var strokesHistory by remember { mutableStateOf(listOf(emptyList<StrokeState>())) }
+    var historyIndex by remember { mutableIntStateOf(0) }
+    var activeStrokes by remember { mutableStateOf(emptyList<StrokeState>()) }
     var currentStrokeState by remember { mutableStateOf<StrokeState?>(null) }
+    val strokes = if (currentStrokeState != null) activeStrokes else strokesHistory[historyIndex]
+
+    fun commitStrokes(newStrokes: List<StrokeState>) {
+        if (newStrokes == strokesHistory[historyIndex]) return
+        val newHistory = strokesHistory.take(historyIndex + 1).toMutableList()
+        newHistory.add(newStrokes)
+        strokesHistory = newHistory
+        historyIndex = newHistory.size - 1
+    }
 
     // Controles de estado
     var isEraserMode by remember { mutableStateOf(false) }
@@ -77,6 +88,16 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                 .padding(8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
+            IconButton(
+                onClick = { if (historyIndex > 0) historyIndex-- },
+                enabled = historyIndex > 0
+            ) { Icon(androidx.compose.material.icons.Icons.Default.Undo, contentDescription = "Deshacer") }
+
+            IconButton(
+                onClick = { if (historyIndex < strokesHistory.size - 1) historyIndex++ },
+                enabled = historyIndex < strokesHistory.size - 1
+            ) { Icon(androidx.compose.material.icons.Icons.Default.Redo, contentDescription = "Rehacer") }
+
             Button(
                 onClick = { isEraserMode = false },
                 colors = ButtonDefaults.buttonColors(
@@ -91,14 +112,8 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                 )
             ) { Text("Borrar") }
 
-            Button(onClick = { palmRejectionEnabled = !palmRejectionEnabled }) {
-                Text(if (palmRejectionEnabled) "Palma: ON" else "Palma: OFF")
-            }
-
             Button(
-                onClick = {
-                    strokes = emptyList()
-                },
+                onClick = { commitStrokes(emptyList()) },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
             ) { Text("Limpiar") }
         }
@@ -134,6 +149,9 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                         val isHardwareEraser = isStylusButtonPressed(event, down.type)
                         val isActuallyErasing = isEraserMode || isHardwareEraser
 
+                        // Iniciamos estado activo basado en el historial actual
+                        activeStrokes = strokesHistory[historyIndex]
+
                         // Calculamos el grosor según la presión recibida
                         var lastWidth = if (isActuallyErasing) {
                             eraserWidth
@@ -144,7 +162,8 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                         var currentStroke: StrokeState? = null
 
                         if (isActuallyErasing) {
-                            strokes = strokes.filterNot { strokeIntersects(it, down.position, lastWidth / 2f) }
+                            activeStrokes = activeStrokes.filterNot { strokeIntersects(it, down.position, lastWidth / 2f) }
+                            currentStrokeState = StrokeState(emptyList(), true) // Usamos un trazo vacío como bandera de borrado activo
                         } else {
                             val initialPoint = PathPoint(down.position, lastWidth, System.currentTimeMillis())
                             currentStroke = StrokeState(listOf(initialPoint), false)
@@ -165,11 +184,18 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                                 lastWidth = smoothedWidth
 
                                 if (isActuallyErasing) {
-                                    strokes = strokes.filterNot { strokeIntersects(it, drag.position, smoothedWidth / 2f) }
+                                    var filtered = activeStrokes
+                                    drag.historical.forEach { hist ->
+                                        filtered = filtered.filterNot { strokeIntersects(it, hist.position, smoothedWidth / 2f) }
+                                    }
+                                    activeStrokes = filtered.filterNot { strokeIntersects(it, drag.position, smoothedWidth / 2f) }
                                 } else {
-                                    val newPoint = PathPoint(drag.position, smoothedWidth, System.currentTimeMillis())
+                                    val newPoints = drag.historical.map { hist ->
+                                        PathPoint(hist.position, smoothedWidth, hist.uptimeMillis)
+                                    } + PathPoint(drag.position, smoothedWidth, drag.uptimeMillis)
+                                    
                                     currentStroke?.let {
-                                        currentStroke = it.copy(points = it.points + newPoint)
+                                        currentStroke = it.copy(points = it.points + newPoints)
                                         currentStrokeState = currentStroke
                                     }
                                 }
@@ -180,10 +206,12 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
 
                         if (!isActuallyErasing) {
                             currentStrokeState?.let {
-                                strokes = strokes + it
+                                commitStrokes(activeStrokes + it)
                             }
-                            currentStrokeState = null
+                        } else {
+                            commitStrokes(activeStrokes)
                         }
+                        currentStrokeState = null
                     }
                 }
         ) {

@@ -783,6 +783,7 @@ fun DashboardScreen(
                 modifier = Modifier
                     .size(windowWidth.dp, windowHeight.dp)
                     .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.large)
+                    .androidx.compose.foundation.border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), MaterialTheme.shapes.large)
                     .clip(MaterialTheme.shapes.large)
             ) {
                 DrawingScreen(viewModel = viewModel, onFinished = { showDrawingSheet = false })
