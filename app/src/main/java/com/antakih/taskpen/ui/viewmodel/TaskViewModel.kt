@@ -415,5 +415,21 @@ class TaskViewModel @Inject constructor(
     val eveningSummaryHour: Flow<Int> = settingsManager.eveningSummaryHour
     val eveningSummaryMinute: Flow<Int> = settingsManager.eveningSummaryMinute
 
+    val dailyReportMode = settingsManager.dailyReportMode.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val confirmTrashDelete = settingsManager.confirmTrashDelete.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    fun setDailyReportMode(mode: Int) {
+        viewModelScope.launch {
+            settingsManager.setDailyReportMode(mode)
+            summaryScheduler.scheduleAll()
+        }
+    }
+
+    fun setConfirmTrashDelete(confirm: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setConfirmTrashDelete(confirm)
+        }
+    }
+
     fun getSubtasks(parentTaskId: String) = taskDao.getSubtasks(parentTaskId)
 }

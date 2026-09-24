@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
 import com.google.mlkit.vision.digitalink.Ink
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 
 // Estructura para guardar un punto individual con su posición, grosor y timestamp para ML Kit
 data class PathPoint(
@@ -101,14 +103,23 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
             ) { Text("Limpiar") }
         }
 
-        // Lienzo (Canvas)
-        Canvas(
+        // Lienzo (Canvas) Desplazable
+        val vScrollState = rememberScrollState()
+        val hScrollState = rememberScrollState()
+        
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .background(Color.White)
-                .graphicsLayer(alpha = 0.99f)
-                .pointerInput(palmRejectionEnabled, isEraserMode) {
+                .horizontalScroll(hScrollState)
+                .verticalScroll(vScrollState)
+        ) {
+            Canvas(
+                modifier = Modifier
+                    .size(2000.dp, 2000.dp) // Tamaño máximo fijo del lienzo
+                    .graphicsLayer(alpha = 0.99f)
+                    .pointerInput(palmRejectionEnabled, isEraserMode) {
                     awaitEachGesture {
                         val down = awaitFirstDown()
 
@@ -186,6 +197,7 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                 drawVariableStroke(stroke)
             }
         }
+        } // Cierre del Box con Scroll
 
         // Botón para procesar el texto con ML Kit
         Button(

@@ -43,6 +43,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import com.antakih.taskpen.data.local.entities.CategoryEntity
 import com.antakih.taskpen.data.local.entities.TaskEntity
 
@@ -60,7 +65,9 @@ sealed class MainPaneState {
 @Composable
 fun DashboardScreen(
     viewModel: TaskViewModel,
-    onTaskClick: (TaskEntity) -> Unit = {}
+    onTaskClick: (TaskEntity) -> Unit = {},
+    initialShowDailyReport: Boolean = false,
+    onDismissDailyReport: () -> Unit = {}
 ) {
     val activeContext by viewModel.activeContext.collectAsState()
     val filterState by viewModel.filterState.collectAsState()
@@ -85,10 +92,29 @@ fun DashboardScreen(
     var showDrawingSheet by remember { mutableStateOf(false) }
     var showManualTaskSheet by remember { mutableStateOf(false) }
 
+    // Reprogramación
     var taskToReschedule by remember { mutableStateOf<com.antakih.taskpen.data.local.entities.TaskEntity?>(null) }
     var rescheduleDateMillis by remember { mutableStateOf<Long?>(null) }
     var showRescheduleDatePicker by remember { mutableStateOf(false) }
     var showRescheduleTimePicker by remember { mutableStateOf(false) }
+
+    // Reporte Diario
+    var showDailyReport by remember(initialShowDailyReport) { mutableStateOf(initialShowDailyReport) }
+
+    // Selección múltiple
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedTasks by remember { mutableStateOf(setOf<String>()) }
+
+    // Papelera Confirmación
+    val confirmTrashDelete by viewModel.confirmTrashDelete.collectAsState()
+    var showTrashConfirmDialog by remember { mutableStateOf(false) }
+    var trashConfirmAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    // Manejo de la selección al cambiar de contexto
+    LaunchedEffect(activeContext) {
+        isSelectionMode = false
+        selectedTasks = emptySet()
+    }
 
     // Solicitar permiso de notificaciones (Android 13+)
     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -168,23 +194,97 @@ fun DashboardScreen(
         Scaffold(
             topBar = {
                 if (!isLandscape) {
-                    TopAppBar(
-                        title = { Text(title, fontWeight = FontWeight.Bold) },
-                        navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Default.Menu, contentDescription = "Menú")
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = { showFilterDialog = true }) {
-                                Icon(Icons.Default.FilterList, contentDescription = "Filtros")
-                            }
-                            IconButton(onClick = { showTagsDialog = true }) {
-                                Icon(Icons.Default.Label, contentDescription = "Etiquetas")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                    )
+                    if (isSelectionMode) {
+                        TopAppBar(
+                            title = { Text("${selectedTasks.size} seleccionadas") },
+                            navigationIcon = {
+                                IconButton(onClick = { isSelectionMode = false; selectedTasks = emptySet() }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Cancelar")
+                                }
+                            },
+                            actions = {
+                                val allTaskIds = displayedTasks.map { it.id }.toSet()
+                                val allSelected = selectedTasks.size == displayedTasks.size && displayedTasks.isNotEmpty()
+                                IconButton(onClick = {
+                                    if (allSelected) selectedTasks = emptySet() else selectedTasks = allTaskIds
+                                }) {
+                                    Icon(if (allSelected) Icons.Default.Deselect else Icons.Default.SelectAll, contentDescription = "Seleccionar todo")
+                                }
+                                if (activeContext is ViewContext.Trash) {
+                                    IconButton(onClick = {
+                                        selectedTasks.forEach { viewModel.restoreTask(it) }
+                                        isSelectionMode = false
+                                        selectedTasks = emptySet()
+                                    }) {
+                                        Icon(Icons.Default.Restore, contentDescription = "Restaurar seleccionadas")
+                                    }
+                                    IconButton(onClick = {
+                                        val selectedList = selectedTasks.toList()
+                                        if (confirmTrashDelete) {
+                                            trashConfirmAction = {
+                                                selectedList.forEach { viewModel.permanentlyDeleteTask(it) }
+                                                isSelectionMode = false
+                                                selectedTasks = emptySet()
+                                            }
+                                            showTrashConfirmDialog = true
+                                        } else {
+                                            selectedList.forEach { viewModel.permanentlyDeleteTask(it) }
+                                            isSelectionMode = false
+                                            selectedTasks = emptySet()
+                                        }
+                                    }) {
+                                        Icon(Icons.Default.DeleteForever, contentDescription = "Eliminar permanentemente", tint = Color.Red)
+                                    }
+                                } else {
+                                    IconButton(onClick = {
+                                        selectedTasks.forEach { viewModel.completeTask(it) }
+                                        isSelectionMode = false
+                                        selectedTasks = emptySet()
+                                    }) {
+                                        Icon(Icons.Default.DoneAll, contentDescription = "Completar seleccionadas")
+                                    }
+                                    IconButton(onClick = {
+                                        selectedTasks.forEach { viewModel.moveToTrash(it) }
+                                        isSelectionMode = false
+                                        selectedTasks = emptySet()
+                                    }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar seleccionadas")
+                                    }
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                        )
+                    } else {
+                        TopAppBar(
+                            title = { Text(title, fontWeight = FontWeight.Bold) },
+                            navigationIcon = {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                    Icon(Icons.Default.Menu, contentDescription = "Menú")
+                                }
+                            },
+                            actions = {
+                                if (activeContext is ViewContext.Trash && deletedTasks.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        if (confirmTrashDelete) {
+                                            trashConfirmAction = { deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) } }
+                                            showTrashConfirmDialog = true
+                                        } else {
+                                            deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) }
+                                        }
+                                    }) {
+                                        Icon(Icons.Default.DeleteSweep, contentDescription = "Vaciar papelera", tint = Color.Red)
+                                    }
+                                }
+                                IconButton(onClick = { showFilterDialog = true }) {
+                                    Icon(Icons.Default.FilterList, contentDescription = "Filtros")
+                                }
+                                IconButton(onClick = { showTagsDialog = true }) {
+                                    Icon(Icons.Default.Label, contentDescription = "Etiquetas")
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        )
+                    }
                 }
             },
             bottomBar = {
@@ -229,20 +329,25 @@ fun DashboardScreen(
         ) { padding ->
             val actualPadding = if (isLandscape) PaddingValues(
                 bottom = padding.calculateBottomPadding(), 
-                top = padding.calculateTopPadding() + 16.dp, 
+                top = padding.calculateTopPadding(), 
                 start = 16.dp, 
                 end = 16.dp
             ) else padding
             
             Column(modifier = Modifier.padding(actualPadding).fillMaxSize()) {
                 if (isLandscape) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
+                    androidx.compose.material3.Surface(
+                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.95f),
+                        modifier = Modifier.fillMaxWidth().padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+                        )
+                    }
                 }
                 
                 if (!isLandscape && recentCategories.isNotEmpty()) {
@@ -303,14 +408,28 @@ fun DashboardScreen(
                                         onToggleImportant = { viewModel.toggleTaskImportance(task.id, !task.isImportant) },
                                         onMoveToTrash = { viewModel.moveToTrash(task.id) },
                                         onRestore = { viewModel.restoreTask(task.id) },
-                                        onDeletePermanently = { viewModel.permanentlyDeleteTask(task.id) },
+                                        onDeletePermanently = { 
+                                            if (confirmTrashDelete) {
+                                                trashConfirmAction = { viewModel.permanentlyDeleteTask(task.id) }
+                                                showTrashConfirmDialog = true
+                                            } else {
+                                                viewModel.permanentlyDeleteTask(task.id)
+                                            }
+                                        },
                                         onClick = { mainPaneState = MainPaneState.TaskDetail(task) },
-                                        onLongClick = { quickViewTask = task },
+                                        onLongClick = { isSelectionMode = true },
                                         onReschedule = {
                                             taskToReschedule = task
                                             rescheduleDateMillis = task.dueDate ?: System.currentTimeMillis()
                                             showRescheduleDatePicker = true
-                                        }
+                                        },
+                                        isSelectionMode = isSelectionMode,
+                                        isSelected = selectedTasks.contains(task.id),
+                                        onToggleSelect = {
+                                            if (selectedTasks.contains(task.id)) selectedTasks -= task.id
+                                            else selectedTasks += task.id
+                                        },
+                                        onSwipeRight = { quickViewTask = task }
                                     )
                                     Spacer(Modifier.height(8.dp))
                                 }
@@ -327,14 +446,28 @@ fun DashboardScreen(
                                     onToggleImportant = { viewModel.toggleTaskImportance(task.id, !task.isImportant) },
                                     onMoveToTrash = { viewModel.moveToTrash(task.id) },
                                     onRestore = { viewModel.restoreTask(task.id) },
-                                    onDeletePermanently = { viewModel.permanentlyDeleteTask(task.id) },
+                                    onDeletePermanently = { 
+                                        if (confirmTrashDelete) {
+                                            trashConfirmAction = { viewModel.permanentlyDeleteTask(task.id) }
+                                            showTrashConfirmDialog = true
+                                        } else {
+                                            viewModel.permanentlyDeleteTask(task.id)
+                                        }
+                                    },
                                     onClick = { mainPaneState = MainPaneState.TaskDetail(task) },
-                                    onLongClick = { quickViewTask = task },
+                                    onLongClick = { isSelectionMode = true },
                                     onReschedule = {
                                         taskToReschedule = task
                                         rescheduleDateMillis = task.dueDate ?: System.currentTimeMillis()
                                         showRescheduleDatePicker = true
-                                    }
+                                    },
+                                    isSelectionMode = isSelectionMode,
+                                    isSelected = selectedTasks.contains(task.id),
+                                    onToggleSelect = {
+                                        if (selectedTasks.contains(task.id)) selectedTasks -= task.id
+                                        else selectedTasks += task.id
+                                    },
+                                    onSwipeRight = { quickViewTask = task }
                                 )
                                 Spacer(Modifier.height(8.dp))
                             }
@@ -505,6 +638,68 @@ fun DashboardScreen(
             text = { TimePicker(state = timePickerState) }
         )
     }
+    if (showTrashConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showTrashConfirmDialog = false; trashConfirmAction = null },
+            title = { Text("Eliminar permanentemente") },
+            text = { Text("¿Estás seguro de que deseas eliminar permanentemente? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    trashConfirmAction?.invoke()
+                    showTrashConfirmDialog = false
+                    trashConfirmAction = null
+                }, colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)) {
+                    Text("Eliminar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTrashConfirmDialog = false; trashConfirmAction = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showDailyReport) {
+        val todayTasks = activeTasks.filter { 
+            val dueDate = it.dueDate
+            if (dueDate == null) false
+            else {
+                val cal = Calendar.getInstance()
+                cal.timeInMillis = System.currentTimeMillis()
+                val todayYear = cal.get(Calendar.YEAR)
+                val todayDay = cal.get(Calendar.DAY_OF_YEAR)
+                cal.timeInMillis = dueDate
+                cal.get(Calendar.YEAR) == todayYear && cal.get(Calendar.DAY_OF_YEAR) == todayDay
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { showDailyReport = false; onDismissDailyReport() },
+            title = { Text("Reporte Diario", fontWeight = FontWeight.Bold) },
+            text = {
+                if (todayTasks.isEmpty()) {
+                    Text("No tienes tareas pendientes para hoy.")
+                } else {
+                    LazyColumn {
+                        items(todayTasks) { task ->
+                            ListItem(
+                                headlineContent = { Text(task.title) },
+                                leadingContent = { 
+                                    Checkbox(checked = task.isCompleted, onCheckedChange = { 
+                                        if (it) viewModel.completeTask(task.id) else viewModel.uncompleteTask(task.id) 
+                                    })
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDailyReport = false; onDismissDailyReport() }) { Text("Cerrar") }
+            }
+        )
+    }
+
     if (showAllCategoriesSheet) {
         AllCategoriesSheet(
             allCategories = allCategories,
@@ -561,8 +756,41 @@ fun DashboardScreen(
         QuickViewDialog(task = it, viewModel = viewModel, onDismiss = { quickViewTask = null }, onEditClick = { mainPaneState = MainPaneState.TaskDetail(it) })
     }
     if (showDrawingSheet) {
-        ModalBottomSheet(onDismissRequest = { showDrawingSheet = false }, modifier = Modifier.fillMaxHeight(0.6f)) {
-            DrawingScreen(viewModel = viewModel, onFinished = { showDrawingSheet = false })
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showDrawingSheet = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            var windowWidth by remember { mutableFloatStateOf(configuration.screenWidthDp * 0.9f) }
+            var windowHeight by remember { mutableFloatStateOf(configuration.screenHeightDp * 0.6f) }
+            
+            Box(
+                modifier = Modifier
+                    .size(windowWidth.dp, windowHeight.dp)
+                    .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.large)
+                    .clip(MaterialTheme.shapes.large)
+            ) {
+                DrawingScreen(viewModel = viewModel, onFinished = { showDrawingSheet = false })
+                
+                // Redimensionador inferior derecho
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(32.dp)
+                        .pointerInput(Unit) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                windowWidth = (windowWidth + dragAmount.x).coerceIn(200f, configuration.screenWidthDp.toFloat())
+                                windowHeight = (windowHeight + dragAmount.y).coerceIn(200f, configuration.screenHeightDp.toFloat())
+                            }
+                        }
+                ) {
+                    Icon(
+                        Icons.Default.DragHandle,
+                        contentDescription = "Redimensionar",
+                        modifier = Modifier.align(Alignment.Center).rotate(45f)
+                    )
+                }
+            }
         }
     }
     
@@ -623,7 +851,11 @@ fun TaskCard(
     onDeletePermanently: () -> Unit = {},
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = {},
-    onReschedule: () -> Unit = {}
+    onReschedule: () -> Unit = {},
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: () -> Unit = {},
+    onSwipeRight: () -> Unit = {}
 ) {
     val dateFormat = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
     val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
@@ -636,8 +868,27 @@ fun TaskCard(
     
     val isOverdue = task.dueDate != null && task.dueDate < System.currentTimeMillis() && !task.isCompleted && task.snoozeUntil == null
 
+    var offsetX by remember { mutableStateOf(0f) }
+
     Card(
-        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (offsetX > 100f) onSwipeRight()
+                        offsetX = 0f
+                    },
+                    onDragCancel = { offsetX = 0f },
+                    onHorizontalDrag = { _, dragAmount ->
+                        offsetX += dragAmount
+                    }
+                )
+            }
+            .combinedClickable(
+                onClick = { if (isSelectionMode) onToggleSelect() else onClick() },
+                onLongClick = { if (!isSelectionMode) onLongClick() else onToggleSelect() }
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isOverdue) Color.Red.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant,
@@ -650,7 +901,13 @@ fun TaskCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (!isTrashContext) {
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelect() },
+                    colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
+                )
+            } else if (!isTrashContext) {
                 Checkbox(checked = task.isCompleted, onCheckedChange = { 
                     if (task.isCompleted) onUncomplete() else onComplete() 
                 })

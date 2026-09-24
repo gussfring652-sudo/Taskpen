@@ -13,6 +13,7 @@ import com.antakih.taskpen.data.local.SettingsManager
 import com.antakih.taskpen.notifications.SummaryScheduler
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.clickable
 
 /**
  * Pantalla de Configuración expandida.
@@ -147,32 +148,120 @@ fun SettingsScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     // Resumen matutino
+                    val dailyReportMode by viewModel.dailyReportMode.collectAsState()
+                    val confirmTrashDelete by viewModel.confirmTrashDelete.collectAsState()
+                    
+                    var showReportModeDialog by remember { mutableStateOf(false) }
+                    
+                    if (showReportModeDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showReportModeDialog = false },
+                            title = { Text("Modo de Reporte Diario") },
+                            text = {
+                                Column {
+                                    listOf("Ambos", "Solo Mañana", "Solo Noche").forEachIndexed { index, title ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().clickable {
+                                                viewModel.setDailyReportMode(index)
+                                                showReportModeDialog = false
+                                            }.padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            RadioButton(selected = dailyReportMode == index, onClick = null)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(title)
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showReportModeDialog = false }) { Text("Cerrar") }
+                            }
+                        )
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable { showReportModeDialog = true }
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Resumen matutino", style = MaterialTheme.typography.bodyLarge)
+                            Text("Modo de Reporte", style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                "Notificación con las tareas del día",
+                                "Cuándo recibir el resumen de tareas",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Gray
                             )
                         }
-                        TextButton(onClick = { showMorningTimePicker = true }) {
-                            Text(
-                                formatTime(morningHour, morningMinute),
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                        Text(
+                            when(dailyReportMode) {
+                                1 -> "Mañana"
+                                2 -> "Noche"
+                                else -> "Ambos"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                    if (dailyReportMode == 0 || dailyReportMode == 1) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Resumen matutino", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    "Notificación con las tareas del día",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
+                            TextButton(onClick = { showMorningTimePicker = true }) {
+                                Text(
+                                    formatTime(morningHour, morningMinute),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+                    }
+
+                    if (dailyReportMode == 0 || dailyReportMode == 2) {
+                        if (dailyReportMode == 0) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Resumen nocturno", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    "Notificación con las tareas pendientes",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
+                            TextButton(onClick = { showEveningTimePicker = true }) {
+                                Text(
+                                    formatTime(eveningHour, eveningMinute),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
                         }
                     }
 
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // Resumen nocturno
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -181,19 +270,17 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Resumen nocturno", style = MaterialTheme.typography.bodyLarge)
+                            Text("Confirmar al vaciar papelera", style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                "Notificación con las tareas pendientes",
+                                "Evita eliminaciones accidentales",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Gray
                             )
                         }
-                        TextButton(onClick = { showEveningTimePicker = true }) {
-                            Text(
-                                formatTime(eveningHour, eveningMinute),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
+                        Switch(
+                            checked = confirmTrashDelete,
+                            onCheckedChange = { viewModel.setConfirmTrashDelete(it) }
+                        )
                     }
                 }
             }
@@ -214,7 +301,7 @@ fun SettingsScreen(
                     val m = timePickerState.minute
                     scope.launch {
                         settingsManager.setMorningSummaryTime(h, m)
-                        summaryScheduler.scheduleMorningSummary(h, m)
+                        summaryScheduler.scheduleAll()
                     }
                     showMorningTimePicker = false
                 }) { Text("Aceptar") }
@@ -241,7 +328,7 @@ fun SettingsScreen(
                     val m = timePickerState.minute
                     scope.launch {
                         settingsManager.setEveningSummaryTime(h, m)
-                        summaryScheduler.scheduleEveningSummary(h, m)
+                        summaryScheduler.scheduleAll()
                     }
                     showEveningTimePicker = false
                 }) { Text("Aceptar") }

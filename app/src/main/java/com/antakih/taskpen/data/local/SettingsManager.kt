@@ -23,6 +23,8 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
         val EVENING_SUMMARY_HOUR = intPreferencesKey("evening_summary_hour")
         val EVENING_SUMMARY_MINUTE = intPreferencesKey("evening_summary_minute")
         val DEFAULT_TASK_PRIORITY = intPreferencesKey("default_task_priority")
+        val DAILY_REPORT_MODE = intPreferencesKey("daily_report_mode")
+        val CONFIRM_TRASH_DELETE = booleanPreferencesKey("confirm_trash_delete")
     }
 
     val isCaseSensitiveTags: StateFlow<Boolean> = context.dataStore.data
@@ -34,6 +36,8 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
     val eveningSummaryHour: Flow<Int> = context.dataStore.data.map { it[Keys.EVENING_SUMMARY_HOUR] ?: 21 }
     val eveningSummaryMinute: Flow<Int> = context.dataStore.data.map { it[Keys.EVENING_SUMMARY_MINUTE] ?: 0 }
     val defaultTaskPriority: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_PRIORITY] ?: 1 }
+    val dailyReportMode: Flow<Int> = context.dataStore.data.map { it[Keys.DAILY_REPORT_MODE] ?: 0 }
+    val confirmTrashDelete: Flow<Boolean> = context.dataStore.data.map { it[Keys.CONFIRM_TRASH_DELETE] ?: true }
 
     fun setCaseSensitiveTags(value: Boolean) {
         scope.launch {
@@ -58,6 +62,18 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
     suspend fun setDefaultTaskPriority(priority: Int) {
         context.dataStore.edit {
             it[Keys.DEFAULT_TASK_PRIORITY] = priority
+        }
+    }
+
+    suspend fun setDailyReportMode(mode: Int) {
+        context.dataStore.edit {
+            it[Keys.DAILY_REPORT_MODE] = mode
+        }
+    }
+
+    suspend fun setConfirmTrashDelete(confirm: Boolean) {
+        context.dataStore.edit {
+            it[Keys.CONFIRM_TRASH_DELETE] = confirm
         }
     }
 }

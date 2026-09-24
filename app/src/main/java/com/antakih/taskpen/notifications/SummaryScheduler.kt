@@ -1,15 +1,14 @@
 package com.antakih.taskpen.notifications
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.util.Log
-import androidx.work.*
 import com.antakih.taskpen.data.local.SettingsManager
-import com.antakih.taskpen.notifications.workers.EveningSummaryWorker
-import com.antakih.taskpen.notifications.workers.MorningSummaryWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,66 +19,109 @@ class SummaryScheduler @Inject constructor(
 ) {
     companion object {
         private const val TAG = "SummaryScheduler"
-        private const val MORNING_WORK_TAG = "morning_summary"
-        private const val EVENING_WORK_TAG = "evening_summary"
+        private const val MORNING_REQUEST_CODE = 8001
+        private const val EVENING_REQUEST_CODE = 8002
     }
 
-    private val workManager = WorkManager.getInstance(context)
+    private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
     /**
      * Programa ambos resúmenes leyendo los horarios del DataStore.
      */
     suspend fun scheduleAll() {
+        val mode = settingsManager.dailyReportMode.first()
         val morningHour = settingsManager.morningSummaryHour.first()
         val morningMinute = settingsManager.morningSummaryMinute.first()
         val eveningHour = settingsManager.eveningSummaryHour.first()
         val eveningMinute = settingsManager.eveningSummaryMinute.first()
 
-        scheduleMorningSummary(morningHour, morningMinute)
-        scheduleEveningSummary(eveningHour, eveningMinute)
+        // 0 = Both, 1 = Morning, 2 = Evening
+        if (mode == 0 || mode == 1) {
+            scheduleMorningSummary(morningHour, morningMinute)
+        } else {
+            cancelMorningSummary()
+        }
+
+        if (mode == 0 || mode == 2) {
+            scheduleEveningSummary(eveningHour, eveningMinute)
+        } else {
+            cancelEveningSummary()
+        }
     }
 
-    fun scheduleMorningSummary(hour: Int, minute: Int) {
-        val delay = calculateInitialDelay(hour, minute)
-        Log.d(TAG, "Resumen matutino programado: delay=${delay}ms (${delay / 60000}min)")
+    private fun scheduleMorningSummary(hour: Int, minute: Int) {
+        val targetTime = calculateNextOccurrence(hour, minute)
+        Log.d(TAG, "Resumen matutino programado para: $targetTime")
 
-        val request = PeriodicWorkRequestBuilder<MorningSummaryWorker>(
-            24, TimeUnit.HOURS
+        val intent = Intent(context, SummaryAlarmReceiver::class.java).apply {
+            putExtra("isEvening", false)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            MORNING_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-            .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-            .addTag(MORNING_WORK_TAG)
-            .build()
 
-        workManager.enqueueUniquePeriodicWork(
-            MORNING_WORK_TAG,
-            ExistingPeriodicWorkPolicy.UPDATE,
-            request
+        alarmManager.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            targetTime,
+            pendingIntent
         )
     }
 
-    fun scheduleEveningSummary(hour: Int, minute: Int) {
-        val delay = calculateInitialDelay(hour, minute)
-        Log.d(TAG, "Resumen nocturno programado: delay=${delay}ms (${delay / 60000}min)")
+    private fun scheduleEveningSummary(hour: Int, minute: Int) {
+        val targetTime = calculateNextOccurrence(hour, minute)
+        Log.d(TAG, "Resumen nocturno programado para: $targetTime")
 
-        val request = PeriodicWorkRequestBuilder<EveningSummaryWorker>(
-            24, TimeUnit.HOURS
+        val intent = Intent(context, SummaryAlarmReceiver::class.java).apply {
+            putExtra("isEvening", true)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            EVENING_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-            .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-            .addTag(EVENING_WORK_TAG)
-            .build()
 
-        workManager.enqueueUniquePeriodicWork(
-            EVENING_WORK_TAG,
-            ExistingPeriodicWorkPolicy.UPDATE,
-            request
+        alarmManager.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            targetTime,
+            pendingIntent
         )
+    }
+
+    private fun cancelMorningSummary() {
+        val intent = Intent(context, SummaryAlarmReceiver::class.java).apply {
+            putExtra("isEvening", false)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            MORNING_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
+    }
+
+    private fun cancelEveningSummary() {
+        val intent = Intent(context, SummaryAlarmReceiver::class.java).apply {
+            putExtra("isEvening", true)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            EVENING_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
     }
 
     /**
-     * Calcula el delay inicial desde ahora hasta la próxima ocurrencia
-     * del horario especificado. Si la hora ya pasó hoy, programa para mañana.
+     * Calcula la próxima ocurrencia del horario especificado en ms.
+     * Si la hora ya pasó hoy, programa para mañana.
      */
-    private fun calculateInitialDelay(hour: Int, minute: Int): Long {
+    private fun calculateNextOccurrence(hour: Int, minute: Int): Long {
         val now = Calendar.getInstance()
         val target = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, hour)
@@ -93,6 +135,6 @@ class SummaryScheduler @Inject constructor(
             target.add(Calendar.DAY_OF_YEAR, 1)
         }
 
-        return target.timeInMillis - now.timeInMillis
+        return target.timeInMillis
     }
 }

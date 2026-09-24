@@ -21,18 +21,39 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var summaryScheduler: SummaryScheduler
 
+    private var showDailyReportFlow = kotlinx.coroutines.flow.MutableStateFlow(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Asegurar que los Workers de resúmenes diarios están encolados
         lifecycleScope.launch {
             summaryScheduler.scheduleAll()
         }
 
+        handleIntent(intent)
+
         setContent {
+            val showReport by showDailyReportFlow.collectAsState()
             TaskpenTheme {
-                DashboardScreen(viewModel = viewModel)
+                DashboardScreen(
+                    viewModel = viewModel, 
+                    initialShowDailyReport = showReport,
+                    onDismissDailyReport = { showDailyReportFlow.value = false }
+                )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra("showDailyReport", false) == true) {
+            showDailyReportFlow.value = true
+            // Limpiar el intent para que no se vuelva a disparar al rotar la pantalla
+            intent.removeExtra("showDailyReport")
         }
     }
 }
