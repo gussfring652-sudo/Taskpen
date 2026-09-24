@@ -87,18 +87,21 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
+                .padding(8.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            IconButton(
+            Button(
                 onClick = { if (historyIndex > 0) historyIndex-- },
-                enabled = historyIndex > 0
-            ) { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Deshacer") }
+                enabled = historyIndex > 0,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+            ) { Text("<-") }
 
-            IconButton(
+            Button(
                 onClick = { if (historyIndex < strokesHistory.size - 1) historyIndex++ },
-                enabled = historyIndex < strokesHistory.size - 1
-            ) { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Rehacer") }
+                enabled = historyIndex < strokesHistory.size - 1,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+            ) { Text("->") }
 
             Button(
                 onClick = { isEraserMode = false },
@@ -113,6 +116,10 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
                     containerColor = if (isEraserMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
                 )
             ) { Text("Borrar") }
+
+            Button(onClick = { palmRejectionEnabled = !palmRejectionEnabled }) {
+                Text(if (palmRejectionEnabled) "Palma: ON" else "Palma: OFF")
+            }
 
             Button(
                 onClick = { commitStrokes(emptyList()) },
