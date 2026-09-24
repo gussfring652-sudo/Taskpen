@@ -780,26 +780,63 @@ fun DashboardScreen(
             var windowWidth by remember { mutableFloatStateOf(configuration.screenWidthDp * 0.9f) }
             var windowHeight by remember { mutableFloatStateOf(configuration.screenHeightDp * 0.6f) }
             
+            var previewWidth by remember { mutableFloatStateOf(0f) }
+            var previewHeight by remember { mutableFloatStateOf(0f) }
+            var isResizing by remember { mutableStateOf(false) }
+
+            val currentWidth = if (isResizing) previewWidth else windowWidth
+            val currentHeight = if (isResizing) previewHeight else windowHeight
+
             Box(
-                modifier = Modifier
-                    .size(windowWidth.dp, windowHeight.dp)
-                    .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.large)
-                    .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), MaterialTheme.shapes.large)
-                    .clip(MaterialTheme.shapes.large)
+                modifier = Modifier.size(currentWidth.dp, currentHeight.dp)
             ) {
-                DrawingScreen(viewModel = viewModel, onFinished = { showDrawingSheet = false })
-                
-                // Redimensionador inferior derecho
+                // Contenido real congelado durante el redimensionamiento
+                Box(
+                    modifier = Modifier
+                        .size(windowWidth.dp, windowHeight.dp)
+                        .align(Alignment.Center)
+                        .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.large)
+                        .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), MaterialTheme.shapes.large)
+                        .clip(MaterialTheme.shapes.large)
+                ) {
+                    DrawingScreen(viewModel = viewModel, onFinished = { showDrawingSheet = false })
+                }
+
+                // Contorno visual de previsualización
+                if (isResizing) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .border(3.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.large)
+                    )
+                }
+
+                // Redimensionador (siempre en la esquina inferior derecha del tamaño actual)
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .size(32.dp)
                         .pointerInput(Unit) {
-                            detectDragGestures { change, dragAmount ->
-                                change.consume()
-                                windowWidth = (windowWidth + dragAmount.x).coerceIn(200f, configuration.screenWidthDp.toFloat())
-                                windowHeight = (windowHeight + dragAmount.y).coerceIn(200f, configuration.screenHeightDp.toFloat())
-                            }
+                            androidx.compose.foundation.gestures.detectDragGestures(
+                                onDragStart = {
+                                    isResizing = true
+                                    previewWidth = windowWidth
+                                    previewHeight = windowHeight
+                                },
+                                onDragEnd = {
+                                    isResizing = false
+                                    windowWidth = previewWidth
+                                    windowHeight = previewHeight
+                                },
+                                onDragCancel = {
+                                    isResizing = false
+                                },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    previewWidth = (previewWidth + dragAmount.x).coerceIn(200f, configuration.screenWidthDp.toFloat())
+                                    previewHeight = (previewHeight + dragAmount.y).coerceIn(200f, configuration.screenHeightDp.toFloat())
+                                }
+                            )
                         }
                 ) {
                     Icon(
