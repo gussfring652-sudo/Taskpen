@@ -263,18 +263,7 @@ fun DashboardScreen(
                             }
                         },
                         actions = {
-                            if (activeContext is ViewContext.Trash && deletedTasks.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    if (confirmTrashDelete) {
-                                        trashConfirmAction = { deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) } }
-                                        showTrashConfirmDialog = true
-                                    } else {
-                                        deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) }
-                                    }
-                                }) {
-                                    Icon(Icons.Default.DeleteSweep, contentDescription = "Vaciar papelera", tint = Color.Red)
-                                }
-                            } else if (activeContext !is ViewContext.Trash && displayedTasks.isNotEmpty()) {
+                            if (displayedTasks.isNotEmpty()) {
                                 IconButton(onClick = { 
                                     isSelectionMode = true
                                     selectedTasks = displayedTasks.map { it.id }.toSet()
@@ -358,18 +347,7 @@ fun DashboardScreen(
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Row {
-                                if (activeContext is ViewContext.Trash && deletedTasks.isNotEmpty()) {
-                                    IconButton(onClick = {
-                                        if (confirmTrashDelete) {
-                                            trashConfirmAction = { deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) } }
-                                            showTrashConfirmDialog = true
-                                        } else {
-                                            deletedTasks.forEach { viewModel.permanentlyDeleteTask(it.id) }
-                                        }
-                                    }) {
-                                        Icon(Icons.Default.DeleteSweep, contentDescription = "Vaciar papelera", tint = Color.Red)
-                                    }
-                                } else if (activeContext !is ViewContext.Trash && displayedTasks.isNotEmpty()) {
+                                if (displayedTasks.isNotEmpty()) {
                                     IconButton(onClick = { 
                                         isSelectionMode = true
                                         selectedTasks = displayedTasks.map { it.id }.toSet()
