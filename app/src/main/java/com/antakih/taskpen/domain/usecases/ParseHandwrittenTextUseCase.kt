@@ -21,7 +21,10 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
         activeCategoryId: String? = null,
         existingTags: List<SubjectEntity> = emptyList(),
         isCaseSensitive: Boolean = false,
-        defaultPriority: Int = 1
+        defaultPriority: Int = 1,
+        defaultTimeMode: Int = 0,
+        defaultTimeHour: Int = 9,
+        defaultTimeMinute: Int = 0
     ): Result {
 
         val processedLines = mutableListOf<Pair<String, Float>>()
@@ -139,10 +142,18 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
                         cal.add(Calendar.DAY_OF_YEAR, 1)
                     }
                 } else {
-                    cal.set(Calendar.HOUR_OF_DAY, 23)
-                    cal.set(Calendar.MINUTE, 59)
-                    cal.set(Calendar.SECOND, 59)
-                    cal.set(Calendar.MILLISECOND, 999)
+                    if (defaultTimeMode == 1) { // Custom Time
+                        cal.set(Calendar.HOUR_OF_DAY, defaultTimeHour)
+                        cal.set(Calendar.MINUTE, defaultTimeMinute)
+                        cal.set(Calendar.SECOND, 0)
+                        cal.set(Calendar.MILLISECOND, 0)
+                    } else { // Creation Time
+                        val now = Calendar.getInstance()
+                        cal.set(Calendar.HOUR_OF_DAY, now.get(Calendar.HOUR_OF_DAY))
+                        cal.set(Calendar.MINUTE, now.get(Calendar.MINUTE))
+                        cal.set(Calendar.SECOND, 0)
+                        cal.set(Calendar.MILLISECOND, 0)
+                    }
                 }
                 dueDateMillis = cal.timeInMillis
             }
@@ -179,27 +190,32 @@ class ParseHandwrittenTextUseCase @Inject constructor() {
                 }
                 extractedTitle = extractedTitle.replace(explicitMatch.value, "").trim()
             } else {
-                // 2. Buscar por contexto al final (para X, de X, en X) SOLO en etiquetas existentes
-                // Ahora no afecta al modo, eso ya se extrajo antes.
-                val contextRegexStr = if (isCaseSensitive) {
-                    "\\s+(para|para la|para el|de|de la|del|en|en la|en el)\\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\s*$"
-                } else {
-                    "(?i)\\s+(para|para la|para el|de|de la|del|en|en la|en el)\\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]+)\\s*$"
-                }
-                val contextRegex = Regex(contextRegexStr)
-                contextRegex.find(extractedTitle)?.let { contextMatch ->
-                    val foundWord = contextMatch.groupValues[2]
-                    val matchedTag = currentKnownTags.find { 
-                        if (isCaseSensitive) {
-                            it.fullName == foundWord || it.aliases.contains(foundWord)
-                        } else {
-                            it.fullName.lowercase() == foundWord.lowercase() || it.aliases.map { a -> a.lowercase() }.contains(foundWord.lowercase())
-                        }
+                // 2. Search for any known tag or alias using word boundaries
+                // Flatten to pairs of (TagEntity, String To Match)
+                val allMatches = mutableListOf<Pair<SubjectEntity, String>>()
+                for (tag in currentKnownTags) {
+                    if (tag.fullName.isNotBlank()) allMatches.add(Pair(tag, tag.fullName.trim()))
+                    for (alias in tag.aliases) {
+                        if (alias.isNotBlank()) allMatches.add(Pair(tag, alias.trim()))
                     }
-                    if (matchedTag != null) {
-                        tagId = matchedTag.id
-                        autoCategoryId = matchedTag.categoryId ?: activeCategoryId
-                        extractedTitle = extractedTitle.replace(contextMatch.value, "").trim()
+                }
+                
+                // Sort by length descending to match longer multi-word tags first
+                allMatches.sortByDescending { it.second.length }
+                
+                for ((tag, matchString) in allMatches) {
+                    val pattern = if (isCaseSensitive) {
+                        "\\b(?:(?:para|de|en|la|el|las|los)\\s+)*${Regex.escape(matchString)}\\b"
+                    } else {
+                        "(?i)\\b(?:(?:para|de|en|la|el|las|los)\\s+)*${Regex.escape(matchString)}\\b"
+                    }
+                    val regex = Regex(pattern)
+                    val match = regex.find(extractedTitle)
+                    if (match != null) {
+                        tagId = tag.id
+                        autoCategoryId = tag.categoryId ?: activeCategoryId
+                        extractedTitle = extractedTitle.replace(match.value, "").trim()
+                        break
                     }
                 }
             }

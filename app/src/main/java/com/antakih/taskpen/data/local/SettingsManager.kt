@@ -25,6 +25,9 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
         val DEFAULT_TASK_PRIORITY = intPreferencesKey("default_task_priority")
         val DAILY_REPORT_MODE = intPreferencesKey("daily_report_mode")
         val CONFIRM_TRASH_DELETE = booleanPreferencesKey("confirm_trash_delete")
+        val DEFAULT_TASK_TIME_MODE = intPreferencesKey("default_task_time_mode")
+        val DEFAULT_TASK_TIME_HOUR = intPreferencesKey("default_task_time_hour")
+        val DEFAULT_TASK_TIME_MINUTE = intPreferencesKey("default_task_time_minute")
     }
 
     val isCaseSensitiveTags: StateFlow<Boolean> = context.dataStore.data
@@ -38,6 +41,9 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
     val defaultTaskPriority: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_PRIORITY] ?: 1 }
     val dailyReportMode: Flow<Int> = context.dataStore.data.map { it[Keys.DAILY_REPORT_MODE] ?: 0 }
     val confirmTrashDelete: Flow<Boolean> = context.dataStore.data.map { it[Keys.CONFIRM_TRASH_DELETE] ?: true }
+    val defaultTaskTimeMode: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_TIME_MODE] ?: 0 }
+    val defaultTaskTimeHour: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_TIME_HOUR] ?: 9 }
+    val defaultTaskTimeMinute: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_TIME_MINUTE] ?: 0 }
 
     fun setCaseSensitiveTags(value: Boolean) {
         scope.launch {
@@ -74,6 +80,14 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
     suspend fun setConfirmTrashDelete(confirm: Boolean) {
         context.dataStore.edit {
             it[Keys.CONFIRM_TRASH_DELETE] = confirm
+        }
+    }
+
+    suspend fun setDefaultTaskTime(mode: Int, hour: Int, minute: Int) {
+        context.dataStore.edit {
+            it[Keys.DEFAULT_TASK_TIME_MODE] = mode
+            it[Keys.DEFAULT_TASK_TIME_HOUR] = hour
+            it[Keys.DEFAULT_TASK_TIME_MINUTE] = minute
         }
     }
 }

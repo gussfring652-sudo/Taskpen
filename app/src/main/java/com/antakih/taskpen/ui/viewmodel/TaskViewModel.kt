@@ -217,7 +217,10 @@ class TaskViewModel @Inject constructor(
                         activeCategoryId = currentCategory,
                         existingTags = existingTags,
                         isCaseSensitive = isCaseSensitiveTags.value,
-                        defaultPriority = defaultTaskPriority.value
+                        defaultPriority = defaultTaskPriority.value,
+                        defaultTimeMode = defaultTaskTimeMode.value,
+                        defaultTimeHour = defaultTaskTimeHour.value,
+                        defaultTimeMinute = defaultTaskTimeMinute.value
                     )
                     // Guardar nuevas etiquetas encontradas explícitamente
                     result.newTags.forEach { subjectDao.insertSubject(it) }
@@ -244,7 +247,10 @@ class TaskViewModel @Inject constructor(
                     activeCategoryId = currentCategory,
                     existingTags = existingTags,
                     isCaseSensitive = isCaseSensitiveTags.value,
-                    defaultPriority = defaultTaskPriority.value
+                    defaultPriority = defaultTaskPriority.value,
+                    defaultTimeMode = defaultTaskTimeMode.value,
+                    defaultTimeHour = defaultTaskTimeHour.value,
+                    defaultTimeMinute = defaultTaskTimeMinute.value
                 )
                 // Guardar nuevas etiquetas encontradas explícitamente
                 result.newTags.forEach { subjectDao.insertSubject(it) }
@@ -428,6 +434,22 @@ class TaskViewModel @Inject constructor(
     fun setConfirmTrashDelete(confirm: Boolean) {
         viewModelScope.launch {
             settingsManager.setConfirmTrashDelete(confirm)
+        }
+    }
+
+    val defaultTaskTimeMode = settingsManager.defaultTaskTimeMode.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val defaultTaskTimeHour = settingsManager.defaultTaskTimeHour.stateIn(viewModelScope, SharingStarted.Eagerly, 9)
+    val defaultTaskTimeMinute = settingsManager.defaultTaskTimeMinute.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    fun setDefaultTaskTimeMode(mode: Int) {
+        viewModelScope.launch {
+            settingsManager.setDefaultTaskTime(mode, defaultTaskTimeHour.value, defaultTaskTimeMinute.value)
+        }
+    }
+
+    fun setDefaultTaskTimeCustom(hour: Int, minute: Int) {
+        viewModelScope.launch {
+            settingsManager.setDefaultTaskTime(1, hour, minute)
         }
     }
 

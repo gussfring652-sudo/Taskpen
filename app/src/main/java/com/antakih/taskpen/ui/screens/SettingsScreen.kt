@@ -132,6 +132,96 @@ fun SettingsScreen(
                             }
                         }
                     }
+
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                    val defaultTaskTimeMode by viewModel.defaultTaskTimeMode.collectAsState()
+                    val defaultTaskTimeHour by viewModel.defaultTaskTimeHour.collectAsState()
+                    val defaultTaskTimeMinute by viewModel.defaultTaskTimeMinute.collectAsState()
+
+                    var showDefaultTaskTimeModeDialog by remember { mutableStateOf(false) }
+                    var showDefaultTaskTimePicker by remember { mutableStateOf(false) }
+
+                    if (showDefaultTaskTimeModeDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showDefaultTaskTimeModeDialog = false },
+                            title = { Text("Hora por defecto") },
+                            text = {
+                                Column {
+                                    listOf("Hora de creación", "Personalizada").forEachIndexed { index, title ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().clickable {
+                                                viewModel.setDefaultTaskTimeMode(index)
+                                                showDefaultTaskTimeModeDialog = false
+                                            }.padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            RadioButton(selected = defaultTaskTimeMode == index, onClick = null)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(title)
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showDefaultTaskTimeModeDialog = false }) { Text("Cerrar") }
+                            }
+                        )
+                    }
+
+                    if (showDefaultTaskTimePicker) {
+                        val timePickerState = rememberTimePickerState(
+                            initialHour = defaultTaskTimeHour,
+                            initialMinute = defaultTaskTimeMinute
+                        )
+                        AlertDialog(
+                            onDismissRequest = { showDefaultTaskTimePicker = false },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    viewModel.setDefaultTaskTimeCustom(timePickerState.hour, timePickerState.minute)
+                                    showDefaultTaskTimePicker = false
+                                }) { Text("Aceptar") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showDefaultTaskTimePicker = false }) { Text("Cancelar") }
+                            },
+                            title = { Text("Selecciona hora personalizada") },
+                            text = { TimePicker(state = timePickerState) }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showDefaultTaskTimeModeDialog = true }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Hora por defecto para nuevas tareas", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Cuando se indique fecha pero no hora",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                        
+                        if (defaultTaskTimeMode == 1) {
+                            TextButton(onClick = { showDefaultTaskTimePicker = true }) {
+                                Text(
+                                    formatTime(defaultTaskTimeHour, defaultTaskTimeMinute),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        } else {
+                            Text(
+                                "Creación",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
             }
 
