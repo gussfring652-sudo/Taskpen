@@ -91,12 +91,12 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
             IconButton(
                 onClick = { if (historyIndex > 0) historyIndex-- },
                 enabled = historyIndex > 0
-            ) { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Deshacer") }
+            ) { Icon(androidx.compose.material.icons.Icons.Default.ArrowBack, contentDescription = "Deshacer") }
 
             IconButton(
                 onClick = { if (historyIndex < strokesHistory.size - 1) historyIndex++ },
                 enabled = historyIndex < strokesHistory.size - 1
-            ) { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Rehacer") }
+            ) { Icon(androidx.compose.material.icons.Icons.Default.ArrowForward, contentDescription = "Rehacer") }
 
             Button(
                 onClick = { isEraserMode = false },
