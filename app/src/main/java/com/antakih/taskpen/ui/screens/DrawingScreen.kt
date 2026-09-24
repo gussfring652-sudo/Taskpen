@@ -91,12 +91,12 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
             IconButton(
                 onClick = { if (historyIndex > 0) historyIndex-- },
                 enabled = historyIndex > 0
-            ) { Icon(androidx.compose.material.icons.Icons.Default.Undo, contentDescription = "Deshacer") }
+            ) { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Deshacer") }
 
             IconButton(
                 onClick = { if (historyIndex < strokesHistory.size - 1) historyIndex++ },
                 enabled = historyIndex < strokesHistory.size - 1
-            ) { Icon(androidx.compose.material.icons.Icons.Default.Redo, contentDescription = "Rehacer") }
+            ) { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Rehacer") }
 
             Button(
                 onClick = { isEraserMode = false },
@@ -359,10 +359,9 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
             confirmButton = {
                 if (draftTasks.isNotEmpty()) {
                     Button(onClick = {
-                        // Guardamos con las correcciones del usuario en los títulos
                         viewModel.saveTasks(draftTasks)
                         showConfirmationDialog = false
-                        strokes = emptyList()
+                        commitStrokes(emptyList())
                         onFinished()
                     }) {
                         Text("Guardar y Cerrar")
