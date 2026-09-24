@@ -817,7 +817,7 @@ fun DashboardScreen(
                         .align(Alignment.BottomEnd)
                         .size(32.dp)
                         .pointerInput(Unit) {
-                            androidx.compose.foundation.gestures.detectDragGestures(
+                            detectDragGestures(
                                 onDragStart = { _ ->
                                     isResizing = true
                                     previewWidth = windowWidth
