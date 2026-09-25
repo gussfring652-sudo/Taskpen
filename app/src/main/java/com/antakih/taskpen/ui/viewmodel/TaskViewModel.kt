@@ -335,12 +335,20 @@ class TaskViewModel @Inject constructor(
         viewModelScope.launch {
             try { 
                 taskDao.updateTaskImportance(taskId, isImportant) 
-                if (isImportant) {
-                    val task = taskDao.getTaskById(taskId)
-                    if (task != null && task.reminderMode == 1 && task.customCascadeIntervalMinutes == null && task.priority < 2) {
-                        val updatedTask = task.copy(isImportant = true, priority = 2)
-                        taskDao.insertTask(updatedTask)
-                        taskAlarmScheduler.scheduleAlarm(updatedTask)
+                val task = taskDao.getTaskById(taskId)
+                if (task != null) {
+                    if (isImportant) {
+                        if (task.reminderMode == 1 && task.customCascadeIntervalMinutes == null && task.priority < 2) {
+                            val updatedTask = task.copy(isImportant = true, priority = 2)
+                            taskDao.insertTask(updatedTask)
+                            taskAlarmScheduler.scheduleAlarm(updatedTask)
+                        }
+                    } else {
+                        if (task.priority == 2) {
+                            val updatedTask = task.copy(isImportant = false, priority = 1)
+                            taskDao.insertTask(updatedTask)
+                            taskAlarmScheduler.scheduleAlarm(updatedTask)
+                        }
                     }
                 }
             }
@@ -373,6 +381,25 @@ class TaskViewModel @Inject constructor(
         viewModelScope.launch {
             try { taskDao.permanentlyDeleteTask(taskId) }
             catch (e: Throwable) { Log.e("TaskPenML", "Error al eliminar tarea: ${e.message}", e) }
+        }
+    }
+
+    fun rescheduleTaskToPospuestas(taskId: String, newDateMillis: Long) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val task = taskDao.getTaskById(taskId) ?: return@launch
+            var pospuestas = categoryDao.getCategoryByName("Pospuestas")
+            if (pospuestas == null) {
+                pospuestas = CategoryEntity(id = java.util.UUID.randomUUID().toString(), name = "Pospuestas", colorHex = "#FF9800", lastUsed = System.currentTimeMillis())
+                categoryDao.insertCategory(pospuestas)
+            }
+            val updated = task.copy(
+                dueDate = newDateMillis,
+                categoryId = pospuestas.id,
+                hasSpecificTime = true,
+                snoozeUntil = null
+            )
+            taskDao.insertTask(updated)
+            taskAlarmScheduler.scheduleAlarm(updated)
         }
     }
 

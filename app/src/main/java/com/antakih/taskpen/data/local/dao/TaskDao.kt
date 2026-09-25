@@ -86,4 +86,12 @@ interface TaskDao {
 
     @Query("UPDATE tasks SET categoryId = :newCategoryId WHERE subcategoryId = :subcategoryId")
     suspend fun updateCategoryForTasksWithSubcategory(subcategoryId: String, newCategoryId: String?)
+
+    @Query("""
+        SELECT * FROM tasks 
+        WHERE isCompleted = 0 AND isDeleted = 0 
+        AND ((dueDate >= :startOfDay AND dueDate < :endOfDay) OR isImportant = 1)
+        ORDER BY dueDate ASC
+    """)
+    suspend fun getSummaryTasks(startOfDay: Long, endOfDay: Long): List<TaskEntity>
 }

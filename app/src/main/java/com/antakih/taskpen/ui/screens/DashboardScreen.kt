@@ -650,7 +650,7 @@ fun DashboardScreen(
                     val newDate = cal.timeInMillis
                     
                     val t = taskToReschedule!!
-                    viewModel.updateTaskDetails(t.id, t.title, t.description, newDate, t.categoryId, t.subcategoryId, hasSpecificTime = true)
+                    viewModel.rescheduleTaskToPospuestas(t.id, newDate)
                     
                     showRescheduleTimePicker = false
                     taskToReschedule = null
@@ -1115,6 +1115,7 @@ fun TagsDialog(
     var editingTagId by remember { mutableStateOf<String?>(null) }
     var tagName by remember { mutableStateOf("") }
     var tagAliases by remember { mutableStateOf("") }
+    var selectedCatId by remember { mutableStateOf<String?>(currentCategoryId) }
     var showAddForm by remember { mutableStateOf(false) }
 
     val filteredTags = tags.filter { it.categoryId == currentCategoryId }
@@ -1147,6 +1148,7 @@ fun TagsDialog(
                                 editingTagId = tag.id
                                 tagName = tag.fullName
                                 tagAliases = tag.aliases.joinToString(", ")
+                                selectedCatId = tag.categoryId
                                 showAddForm = true
                             }) {
                                 Icon(Icons.Default.Edit, contentDescription = "Editar", modifier = Modifier.size(20.dp))
@@ -1166,6 +1168,7 @@ fun TagsDialog(
                             editingTagId = null
                             tagName = ""
                             tagAliases = ""
+                            selectedCatId = currentCategoryId
                             showAddForm = true
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -1187,6 +1190,46 @@ fun TagsDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
+
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    var expanded by remember { mutableStateOf(false) }
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = !expanded }
+                    ) {
+                        OutlinedTextField(
+                            value = categories.find { it.id == selectedCatId }?.name ?: "Globales",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Categoría") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Globales") },
+                                onClick = {
+                                    selectedCatId = null
+                                    expanded = false
+                                }
+                            )
+                            categories.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { Text(cat.name) },
+                                    onClick = {
+                                        selectedCatId = cat.id
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         TextButton(onClick = {
                             showAddForm = false
@@ -1203,9 +1246,9 @@ fun TagsDialog(
                                         .map { it.trim().lowercase() }
                                         .filter { it.isNotEmpty() }
                                     if (editingTagId == null) {
-                                        onAddTag(currentCategoryId, tagName.trim(), aliasesList)
+                                        onAddTag(selectedCatId, tagName.trim(), aliasesList)
                                     } else {
-                                        onUpdateTag(editingTagId!!, currentCategoryId, tagName.trim(), aliasesList)
+                                        onUpdateTag(editingTagId!!, selectedCatId, tagName.trim(), aliasesList)
                                         editingTagId = null
                                     }
                                     tagName = ""

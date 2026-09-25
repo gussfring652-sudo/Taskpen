@@ -31,4 +31,7 @@ interface CategoryDao {
 
     @Update
     suspend fun updateCategory(category: CategoryEntity)
+
+    @Query("SELECT * FROM categories WHERE name = :name LIMIT 1")
+    suspend fun getCategoryByName(name: String): CategoryEntity?
 }

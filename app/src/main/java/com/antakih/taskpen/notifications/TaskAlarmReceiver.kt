@@ -5,10 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.antakih.taskpen.data.local.dao.TaskDao
+import com.antakih.taskpen.data.local.dao.CategoryDao
+import com.antakih.taskpen.data.local.dao.SubjectDao
+import com.antakih.taskpen.data.local.entities.CategoryEntity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -25,11 +29,14 @@ import javax.inject.Inject
 class TaskAlarmReceiver : BroadcastReceiver() {
 
     @Inject lateinit var taskDao: TaskDao
+    @Inject lateinit var subjectDao: SubjectDao
+    @Inject lateinit var categoryDao: CategoryDao
     @Inject lateinit var notificationHelper: NotificationHelper
     @Inject lateinit var taskAlarmScheduler: TaskAlarmScheduler
 
     companion object {
         private const val TAG = "TaskAlarmReceiver"
+        const val ACTION_SNOOZE = "ACTION_SNOOZE"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -38,7 +45,8 @@ class TaskAlarmReceiver : BroadcastReceiver() {
             return
         }
 
-        Log.d(TAG, "Alarma disparada para taskId: $taskId")
+        val action = intent.action
+        Log.d(TAG, "Alarma disparada para taskId: $taskId, action: $action")
 
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
@@ -55,26 +63,49 @@ class TaskAlarmReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                // Limpiar snoozeUntil si existía (ya se ejecutó)
-                if (task.snoozeUntil != null) {
-                    taskDao.updateSnoozeUntil(taskId, null)
-                }
-
-                // Mostrar la notificación visual
-                notificationHelper.showTaskReminder(task)
-
-                // RE-PROGRAMAR la siguiente alarma en cascada
-                // El scheduler evaluará el nuevo tiempo restante y dejará
-                // programada la siguiente alarma del cascading schedule o tiempo exacto.
-                // El bucle se rompe naturalmente cuando no quedan más puntos futuros.
-                val rescheduledTask = task.copy(snoozeUntil = null)
-                val hasNext = taskAlarmScheduler.scheduleAlarm(rescheduledTask)
-                if (hasNext) {
-                    Log.d(TAG, "Siguiente alarma programada para: ${task.title}")
+                if (action == ACTION_SNOOZE) {
+                    var pospuestas = categoryDao.getCategoryByName("Pospuestas")
+                    if (pospuestas == null) {
+                        pospuestas = CategoryEntity(
+                            id = java.util.UUID.randomUUID().toString(),
+                            name = "Pospuestas",
+                            colorHex = "#FF9800",
+                            lastUsed = System.currentTimeMillis()
+                        )
+                        categoryDao.insertCategory(pospuestas)
+                    }
+                    val newSnoozeUntil = intent.getLongExtra("snoozeUntil", System.currentTimeMillis() + 15 * 60 * 1000L)
+                    val updatedTask = task.copy(categoryId = pospuestas.id, snoozeUntil = newSnoozeUntil)
+                    taskDao.insertTask(updatedTask)
+                    taskAlarmScheduler.scheduleAlarm(updatedTask)
+                    notificationHelper.cancelNotification(taskId)
                 } else {
-                    Log.d(TAG, "Última alarma para: ${task.title}")
-                }
+                    // Limpiar snoozeUntil si existía (ya se ejecutó)
+                    if (task.snoozeUntil != null) {
+                        taskDao.updateSnoozeUntil(taskId, null)
+                    }
 
+                    // Append subject name to task title if present
+                    var taskToShow = task
+                    if (task.subcategoryId != null) {
+                        val subject = subjectDao.getSubjectById(task.subcategoryId)
+                        if (subject != null) {
+                            taskToShow = task.copy(title = "${task.title} [${subject.fullName}]")
+                        }
+                    }
+
+                    // Mostrar la notificación visual
+                    notificationHelper.showTaskReminder(taskToShow)
+
+                    // RE-PROGRAMAR la siguiente alarma en cascada
+                    val rescheduledTask = task.copy(snoozeUntil = null)
+                    val hasNext = taskAlarmScheduler.scheduleAlarm(rescheduledTask)
+                    if (hasNext) {
+                        Log.d(TAG, "Siguiente alarma programada para: ${task.title}")
+                    } else {
+                        Log.d(TAG, "Última alarma para: ${task.title}")
+                    }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error procesando alarma: ${e.message}", e)
             } finally {

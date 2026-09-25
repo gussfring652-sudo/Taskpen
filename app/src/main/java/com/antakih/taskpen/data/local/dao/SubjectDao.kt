@@ -33,4 +33,7 @@ interface SubjectDao {
 
     @Query("DELETE FROM subjects WHERE id = :id")
     suspend fun deleteSubject(id: String)
+
+    @Query("SELECT * FROM subjects WHERE id = :id")
+    suspend fun getSubjectById(id: String): SubjectEntity?
 }

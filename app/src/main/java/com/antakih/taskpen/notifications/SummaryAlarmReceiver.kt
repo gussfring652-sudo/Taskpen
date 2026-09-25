@@ -3,6 +3,7 @@ package com.antakih.taskpen.notifications
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.antakih.taskpen.data.local.dao.SubjectDao
 import com.antakih.taskpen.R
 import com.antakih.taskpen.data.local.dao.TaskDao
 import dagger.hilt.android.AndroidEntryPoint
@@ -18,6 +19,9 @@ class SummaryAlarmReceiver : BroadcastReceiver() {
 
     @Inject
     lateinit var taskDao: TaskDao
+
+    @Inject
+    lateinit var subjectDao: SubjectDao
 
     @Inject
     lateinit var notificationHelper: NotificationHelper
@@ -36,13 +40,28 @@ class SummaryAlarmReceiver : BroadcastReceiver() {
                 val calendar = Calendar.getInstance()
                 
                 if (isEvening) {
+                    calendar.add(Calendar.DAY_OF_YEAR, 1)
+                    calendar.set(Calendar.HOUR_OF_DAY, 0)
+                    calendar.set(Calendar.MINUTE, 0)
+                    calendar.set(Calendar.SECOND, 0)
+                    calendar.set(Calendar.MILLISECOND, 0)
+                    val startOfDay = calendar.timeInMillis
+
                     calendar.set(Calendar.HOUR_OF_DAY, 23)
                     calendar.set(Calendar.MINUTE, 59)
                     calendar.set(Calendar.SECOND, 59)
                     calendar.set(Calendar.MILLISECOND, 999)
                     val endOfDay = calendar.timeInMillis
 
-                    val tasks = taskDao.getOverdueAndTodayTasks(endOfDay)
+                    val rawTasks = taskDao.getSummaryTasks(startOfDay, endOfDay)
+                    val tasks = rawTasks.map { t ->
+                        if (t.subcategoryId != null) {
+                            val subject = subjectDao.getSubjectById(t.subcategoryId)
+                            if (subject != null) {
+                                t.copy(title = "${t.title} [${subject.fullName}]")
+                            } else t
+                        } else t
+                    }
 
                     notificationHelper.showDailySummary(
                         title = context.getString(R.string.evening_summary_title),
@@ -63,7 +82,15 @@ class SummaryAlarmReceiver : BroadcastReceiver() {
                     calendar.set(Calendar.MILLISECOND, 999)
                     val endOfDay = calendar.timeInMillis
 
-                    val tasks = taskDao.getTasksForDay(startOfDay, endOfDay)
+                    val rawTasks = taskDao.getSummaryTasks(startOfDay, endOfDay)
+                    val tasks = rawTasks.map { t ->
+                        if (t.subcategoryId != null) {
+                            val subject = subjectDao.getSubjectById(t.subcategoryId)
+                            if (subject != null) {
+                                t.copy(title = "${t.title} [${subject.fullName}]")
+                            } else t
+                        } else t
+                    }
 
                     notificationHelper.showDailySummary(
                         title = context.getString(R.string.morning_summary_title),
