@@ -611,8 +611,8 @@ fun EditTaskDialog(
     }
 
     if (showTimePicker) {
-        val defaultHour by viewModel.defaultTaskTimeHour.collectAsState(initial = 9)
-        val defaultMinute by viewModel.defaultTaskTimeMinute.collectAsState(initial = 0)
+        val defaultHour by viewModel.timePickerDefaultHour.collectAsState(initial = 9)
+        val defaultMinute by viewModel.timePickerDefaultMinute.collectAsState(initial = 0)
         
         val initHour: Int
         val initMinute: Int

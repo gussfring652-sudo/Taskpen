@@ -653,8 +653,8 @@ fun DashboardScreen(
     }
 
     if (showRescheduleTimePicker && taskToReschedule != null) {
-        val defaultHour by viewModel.defaultTaskTimeHour.collectAsState(initial = 9)
-        val defaultMinute by viewModel.defaultTaskTimeMinute.collectAsState(initial = 0)
+        val defaultHour by viewModel.timePickerDefaultHour.collectAsState(initial = 9)
+        val defaultMinute by viewModel.timePickerDefaultMinute.collectAsState(initial = 0)
         
         val cal = Calendar.getInstance()
         if (rescheduleDateMillis != null) cal.timeInMillis = rescheduleDateMillis!!
@@ -1659,8 +1659,8 @@ fun ManualTaskSheet(
     }
 
     if (showTimePicker) {
-        val defaultHour by viewModel.defaultTaskTimeHour.collectAsState(initial = 9)
-        val defaultMinute by viewModel.defaultTaskTimeMinute.collectAsState(initial = 0)
+        val defaultHour by viewModel.timePickerDefaultHour.collectAsState(initial = 9)
+        val defaultMinute by viewModel.timePickerDefaultMinute.collectAsState(initial = 0)
         
         val timePickerState = rememberTimePickerState(initialHour = defaultHour, initialMinute = defaultMinute)
         AlertDialog(

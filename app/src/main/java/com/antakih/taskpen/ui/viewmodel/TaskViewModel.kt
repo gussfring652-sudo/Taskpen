@@ -478,6 +478,15 @@ class TaskViewModel @Inject constructor(
     val defaultTaskTimeMode = settingsManager.defaultTaskTimeMode.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
     val defaultTaskTimeHour = settingsManager.defaultTaskTimeHour.stateIn(viewModelScope, SharingStarted.Eagerly, 9)
     val defaultTaskTimeMinute = settingsManager.defaultTaskTimeMinute.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    
+    val timePickerDefaultHour = settingsManager.timePickerDefaultHour.stateIn(viewModelScope, SharingStarted.Eagerly, 9)
+    val timePickerDefaultMinute = settingsManager.timePickerDefaultMinute.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    fun setTimePickerDefault(hour: Int, minute: Int) {
+        viewModelScope.launch {
+            settingsManager.setTimePickerDefault(hour, minute)
+        }
+    }
 
     fun setDefaultTaskTimeMode(mode: Int) {
         viewModelScope.launch {

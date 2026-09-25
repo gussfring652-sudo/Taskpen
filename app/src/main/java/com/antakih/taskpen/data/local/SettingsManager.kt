@@ -32,6 +32,8 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
         val CASCADE_MEDIUM = stringPreferencesKey("cascade_medium")
         val CASCADE_HIGH = stringPreferencesKey("cascade_high")
         val USE_CUSTOM_CASCADES = booleanPreferencesKey("use_custom_cascades")
+        val TIME_PICKER_DEFAULT_HOUR = intPreferencesKey("time_picker_default_hour")
+        val TIME_PICKER_DEFAULT_MINUTE = intPreferencesKey("time_picker_default_minute")
     }
 
     val isCaseSensitiveTags: StateFlow<Boolean> = context.dataStore.data
@@ -48,6 +50,9 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
     val defaultTaskTimeMode: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_TIME_MODE] ?: 0 }
     val defaultTaskTimeHour: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_TIME_HOUR] ?: 9 }
     val defaultTaskTimeMinute: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_TIME_MINUTE] ?: 0 }
+    
+    val timePickerDefaultHour: Flow<Int> = context.dataStore.data.map { it[Keys.TIME_PICKER_DEFAULT_HOUR] ?: 9 }
+    val timePickerDefaultMinute: Flow<Int> = context.dataStore.data.map { it[Keys.TIME_PICKER_DEFAULT_MINUTE] ?: 0 }
 
     val cascadeLow: StateFlow<String> = context.dataStore.data
         .map { it[Keys.CASCADE_LOW] ?: "3d,2d,1d" }
@@ -124,6 +129,13 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
     suspend fun setUseCustomCascades(value: Boolean) {
         context.dataStore.edit {
             it[Keys.USE_CUSTOM_CASCADES] = value
+        }
+    }
+
+    suspend fun setTimePickerDefault(hour: Int, minute: Int) {
+        context.dataStore.edit {
+            it[Keys.TIME_PICKER_DEFAULT_HOUR] = hour
+            it[Keys.TIME_PICKER_DEFAULT_MINUTE] = minute
         }
     }
 }

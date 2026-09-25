@@ -141,9 +141,12 @@ fun SettingsScreen(
                     val defaultTaskTimeMode by viewModel.defaultTaskTimeMode.collectAsState()
                     val defaultTaskTimeHour by viewModel.defaultTaskTimeHour.collectAsState()
                     val defaultTaskTimeMinute by viewModel.defaultTaskTimeMinute.collectAsState()
+                    val timePickerDefaultHour by viewModel.timePickerDefaultHour.collectAsState()
+                    val timePickerDefaultMinute by viewModel.timePickerDefaultMinute.collectAsState()
 
                     var showDefaultTaskTimeModeDialog by remember { mutableStateOf(false) }
                     var showDefaultTaskTimePicker by remember { mutableStateOf(false) }
+                    var showTimePickerDefaultDialog by remember { mutableStateOf(false) }
 
                     if (showDefaultTaskTimeModeDialog) {
                         AlertDialog(
@@ -225,6 +228,48 @@ fun SettingsScreen(
                             )
                         }
                     }
+                }
+            }
+
+            if (showTimePickerDefaultDialog) {
+                val tpState = rememberTimePickerState(initialHour = timePickerDefaultHour, initialMinute = timePickerDefaultMinute)
+                AlertDialog(
+                    onDismissRequest = { showTimePickerDefaultDialog = false },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.setTimePickerDefault(tpState.hour, tpState.minute)
+                            showTimePickerDefaultDialog = false
+                        }) { Text("Aceptar") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showTimePickerDefaultDialog = false }) { Text("Cancelar") }
+                    },
+                    title = { Text("Hora inicial") },
+                    text = { TimePicker(state = tpState) }
+                )
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { showTimePickerDefaultDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Hora inicial del reloj", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Al editar o posponer sin hora",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                    Text(
+                        formatTime(timePickerDefaultHour, timePickerDefaultMinute),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
 
