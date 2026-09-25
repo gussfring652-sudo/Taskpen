@@ -228,50 +228,55 @@ fun SettingsScreen(
                             )
                         }
                     }
-                }
-            }
-
-            if (showTimePickerDefaultDialog) {
-                val tpState = rememberTimePickerState(initialHour = timePickerDefaultHour, initialMinute = timePickerDefaultMinute)
-                AlertDialog(
-                    onDismissRequest = { showTimePickerDefaultDialog = false },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            viewModel.setTimePickerDefault(tpState.hour, tpState.minute)
-                            showTimePickerDefaultDialog = false
-                        }) { Text("Aceptar") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showTimePickerDefaultDialog = false }) { Text("Cancelar") }
-                    },
-                    title = { Text("Hora inicial") },
-                    text = { TimePicker(state = tpState) }
-                )
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { showTimePickerDefaultDialog = true }
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Hora inicial del reloj", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "Al editar o posponer sin hora",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
+                    
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    
+                    if (showTimePickerDefaultDialog) {
+                        val tpState = rememberTimePickerState(initialHour = timePickerDefaultHour, initialMinute = timePickerDefaultMinute)
+                        AlertDialog(
+                            onDismissRequest = { showTimePickerDefaultDialog = false },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    viewModel.setTimePickerDefault(tpState.hour, tpState.minute)
+                                    showTimePickerDefaultDialog = false
+                                }) { Text("Aceptar") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showTimePickerDefaultDialog = false }) { Text("Cancelar") }
+                            },
+                            title = { Text("Hora inicial") },
+                            text = { TimePicker(state = tpState) }
                         )
                     }
-                    Text(
-                        formatTime(timePickerDefaultHour, timePickerDefaultMinute),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showTimePickerDefaultDialog = true }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Hora inicial del reloj", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Al editar o posponer sin hora",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                        Text(
+                            formatTime(timePickerDefaultHour, timePickerDefaultMinute),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
+
+
+
+            
 
             Spacer(modifier = Modifier.height(24.dp))
 
