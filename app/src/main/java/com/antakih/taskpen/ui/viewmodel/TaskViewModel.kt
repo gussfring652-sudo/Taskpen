@@ -387,14 +387,9 @@ class TaskViewModel @Inject constructor(
     fun rescheduleTaskToPospuestas(taskId: String, newDateMillis: Long) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val task = taskDao.getTaskById(taskId) ?: return@launch
-            var pospuestas = categoryDao.getCategoryByName("Pospuestas")
-            if (pospuestas == null) {
-                pospuestas = CategoryEntity(id = java.util.UUID.randomUUID().toString(), name = "Pospuestas", colorHex = "#FF9800", lastUsed = System.currentTimeMillis())
-                categoryDao.insertCategory(pospuestas)
-            }
             val updated = task.copy(
                 dueDate = newDateMillis,
-                categoryId = pospuestas.id,
+                isPostponed = true,
                 hasSpecificTime = true,
                 snoozeUntil = null
             )

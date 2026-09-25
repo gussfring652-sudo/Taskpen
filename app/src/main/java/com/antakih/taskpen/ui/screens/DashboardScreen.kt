@@ -144,7 +144,7 @@ fun DashboardScreen(
                 !it.isCompleted && it.dueDate != null && android.text.format.DateUtils.isToday(it.dueDate - 86400000)
             }
             is ViewContext.Postponed -> activeTasks.filter {
-                !it.isCompleted && it.dueDate != null && it.dueDate < System.currentTimeMillis() && !android.text.format.DateUtils.isToday(it.dueDate)
+                !it.isCompleted && (it.isPostponed || (it.dueDate != null && it.dueDate < System.currentTimeMillis() && !android.text.format.DateUtils.isToday(it.dueDate)))
             }
         }
         

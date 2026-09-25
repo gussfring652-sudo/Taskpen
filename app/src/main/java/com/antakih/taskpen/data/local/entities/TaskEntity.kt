@@ -35,5 +35,6 @@ data class TaskEntity(
     @ColumnInfo(defaultValue = "NULL") val recurrenceIntervalMinutes: Int? = null,
     @ColumnInfo(defaultValue = "NULL") val recurrenceMaxOccurrences: Int? = null,
     @ColumnInfo(defaultValue = "NULL") val recurrenceEndDate: Long? = null,
+    @ColumnInfo(defaultValue = "0") val isPostponed: Boolean = false,
     val calendarEventId: String?
 )

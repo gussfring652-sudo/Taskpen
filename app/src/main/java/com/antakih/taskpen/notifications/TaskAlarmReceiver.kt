@@ -64,18 +64,11 @@ class TaskAlarmReceiver : BroadcastReceiver() {
                 }
 
                 if (action == ACTION_SNOOZE) {
-                    var pospuestas = categoryDao.getCategoryByName("Pospuestas")
-                    if (pospuestas == null) {
-                        pospuestas = CategoryEntity(
-                            id = java.util.UUID.randomUUID().toString(),
-                            name = "Pospuestas",
-                            colorHex = "#FF9800",
-                            lastUsed = System.currentTimeMillis()
-                        )
-                        categoryDao.insertCategory(pospuestas)
-                    }
                     val newSnoozeUntil = intent.getLongExtra("snoozeUntil", System.currentTimeMillis() + 15 * 60 * 1000L)
-                    val updatedTask = task.copy(categoryId = pospuestas.id, snoozeUntil = newSnoozeUntil)
+                    val updatedTask = task.copy(
+                        isPostponed = true,
+                        snoozeUntil = newSnoozeUntil
+                    )
                     taskDao.insertTask(updatedTask)
                     taskAlarmScheduler.scheduleAlarm(updatedTask)
                     notificationHelper.cancelNotification(taskId)
