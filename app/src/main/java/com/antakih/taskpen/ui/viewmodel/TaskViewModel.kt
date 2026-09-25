@@ -454,6 +454,11 @@ class TaskViewModel @Inject constructor(
     val eveningSummaryHour: Flow<Int> = settingsManager.eveningSummaryHour
     val eveningSummaryMinute: Flow<Int> = settingsManager.eveningSummaryMinute
 
+    val useCustomCascades = settingsManager.useCustomCascades
+    val cascadeLow = settingsManager.cascadeLow
+    val cascadeMedium = settingsManager.cascadeMedium
+    val cascadeHigh = settingsManager.cascadeHigh
+
     val dailyReportMode = settingsManager.dailyReportMode.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
     val confirmTrashDelete = settingsManager.confirmTrashDelete.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 

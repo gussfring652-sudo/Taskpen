@@ -180,10 +180,19 @@ class TaskAlarmScheduler @Inject constructor(
      * disparar la alarma.
      */
     private fun getCascadeOffsets(priority: Int): List<Long> {
-        val intervalsStr = when (priority) {
-            2 -> settingsManager.cascadeHigh.value
-            1 -> settingsManager.cascadeMedium.value
-            else -> settingsManager.cascadeLow.value
+        val useCustom = settingsManager.useCustomCascades.value
+        val intervalsStr = if (useCustom) {
+            when (priority) {
+                2 -> settingsManager.cascadeHigh.value
+                1 -> settingsManager.cascadeMedium.value
+                else -> settingsManager.cascadeLow.value
+            }
+        } else {
+            when (priority) {
+                2 -> "2d,1d,12h,6h,3h,1h"
+                1 -> "3d,2d,1d,12h,6h"
+                else -> "3d,2d,1d"
+            }
         }
         
         return intervalsStr.split(",")

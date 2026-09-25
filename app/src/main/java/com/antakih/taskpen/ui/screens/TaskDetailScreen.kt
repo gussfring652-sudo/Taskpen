@@ -412,10 +412,23 @@ fun EditTaskDialog(
                     Spacer(modifier = Modifier.height(4.dp))
                     
                     if (selectedReminderMode == 1) {
-                        val cascadeDesc = when (selectedPriority) {
-                            2 -> "7d → 3d → 12h antes"
-                            1 -> "2d → 1d → 4h antes"
-                            else -> "1d → 12h → 1h antes"
+                        val useCustom by viewModel.useCustomCascades.collectAsState()
+                        val lowStr by viewModel.cascadeLow.collectAsState()
+                        val medStr by viewModel.cascadeMedium.collectAsState()
+                        val highStr by viewModel.cascadeHigh.collectAsState()
+
+                        val cascadeDesc = if (useCustom) {
+                            when (selectedPriority) {
+                                2 -> highStr.split(",").joinToString(" → ") + " antes"
+                                1 -> medStr.split(",").joinToString(" → ") + " antes"
+                                else -> lowStr.split(",").joinToString(" → ") + " antes"
+                            }
+                        } else {
+                            when (selectedPriority) {
+                                2 -> "2d → 1d → 12h → 6h → 3h → 1h antes"
+                                1 -> "3d → 2d → 1d → 12h → 6h antes"
+                                else -> "3d → 2d → 1d antes"
+                            }
                         }
                         Text(
                             text = "Avisos múltiples: $cascadeDesc",

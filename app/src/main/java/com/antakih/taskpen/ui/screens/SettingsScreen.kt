@@ -388,13 +388,39 @@ fun SettingsScreen(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            val cascadeLow by settingsManager.cascadeLow.collectAsState()
-            val cascadeMedium by settingsManager.cascadeMedium.collectAsState()
-            val cascadeHigh by settingsManager.cascadeHigh.collectAsState()
+            val cascadeLow by viewModel.cascadeLow.collectAsState()
+            val cascadeMedium by viewModel.cascadeMedium.collectAsState()
+            val cascadeHigh by viewModel.cascadeHigh.collectAsState()
+            val useCustomCascades by viewModel.useCustomCascades.collectAsState()
 
             var cascadeDialogPriority by remember { mutableStateOf<Int?>(null) }
             var cascadeDialogValue by remember { mutableStateOf("") }
             var cascadeDialogError by remember { mutableStateOf(false) }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Tiempos en cascada personalizados", style = MaterialTheme.typography.bodyLarge)
+                        Text("Activar para configurar intervalos propios", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                    Switch(
+                        checked = useCustomCascades,
+                        onCheckedChange = { 
+                            scope.launch { 
+                                settingsManager.setUseCustomCascades(it) 
+                            } 
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column {
@@ -404,10 +430,11 @@ fun SettingsScreen(
                         Triple(2, "Alta", cascadeHigh)
                     ).forEachIndexed { index, triple ->
                         val (priority, label, value) = triple
+                        val alpha = if (useCustomCascades) 1f else 0.5f
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .clickable(enabled = useCustomCascades) {
                                     cascadeDialogPriority = priority
                                     cascadeDialogValue = value
                                     cascadeDialogError = false
@@ -417,11 +444,11 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Prioridad $label", style = MaterialTheme.typography.bodyLarge)
+                                Text("Prioridad $label", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
                                 Text(
                                     value,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.Gray
+                                    color = Color.Gray.copy(alpha = alpha)
                                 )
                             }
                         }

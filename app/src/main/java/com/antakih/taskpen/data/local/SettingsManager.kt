@@ -31,6 +31,7 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
         val CASCADE_LOW = stringPreferencesKey("cascade_low")
         val CASCADE_MEDIUM = stringPreferencesKey("cascade_medium")
         val CASCADE_HIGH = stringPreferencesKey("cascade_high")
+        val USE_CUSTOM_CASCADES = booleanPreferencesKey("use_custom_cascades")
     }
 
     val isCaseSensitiveTags: StateFlow<Boolean> = context.dataStore.data
@@ -57,8 +58,12 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
         .stateIn(scope, SharingStarted.Eagerly, "3d,2d,1d,12h,6h")
 
     val cascadeHigh: StateFlow<String> = context.dataStore.data
-        .map { it[Keys.CASCADE_HIGH] ?: "3d,2d,1d,12h,6h,3h,1h" }
-        .stateIn(scope, SharingStarted.Eagerly, "3d,2d,1d,12h,6h,3h,1h")
+        .map { it[Keys.CASCADE_HIGH] ?: "2d,1d,12h,6h,3h,1h" }
+        .stateIn(scope, SharingStarted.Eagerly, "2d,1d,12h,6h,3h,1h")
+
+    val useCustomCascades: StateFlow<Boolean> = context.dataStore.data
+        .map { it[Keys.USE_CUSTOM_CASCADES] ?: false }
+        .stateIn(scope, SharingStarted.Eagerly, false)
 
     fun setCaseSensitiveTags(value: Boolean) {
         scope.launch {
@@ -113,6 +118,12 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
                 1 -> it[Keys.CASCADE_MEDIUM] = intervalsStr
                 2 -> it[Keys.CASCADE_HIGH] = intervalsStr
             }
+        }
+    }
+
+    suspend fun setUseCustomCascades(value: Boolean) {
+        context.dataStore.edit {
+            it[Keys.USE_CUSTOM_CASCADES] = value
         }
     }
 }
