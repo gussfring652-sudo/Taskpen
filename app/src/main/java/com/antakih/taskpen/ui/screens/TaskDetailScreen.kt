@@ -35,6 +35,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlinx.coroutines.flow.first
 
 private fun getUtcMidnightForLocal(localMillis: Long): Long {
     val localCal = java.util.Calendar.getInstance().apply { timeInMillis = localMillis }
@@ -248,11 +249,9 @@ fun TaskDetailScreen(
                 allCategories = allCategories,
                 allTags = allTags,
                 onDismiss = { showEditDialog = false },
-                onSave = { title, desc, date, catId, tagId ->
-                    viewModel.updateTaskDetails(task.id, title, desc, date, catId, tagId)
-                },
-                onSaveReminder = { priority, offsetMinutes, reminderMode, customCascadeInterval, recurrenceInterval, maxOccurrences, endDate ->
-                    viewModel.updateTaskReminder(task.id, priority, offsetMinutes, reminderMode, customCascadeInterval, recurrenceInterval, maxOccurrences, endDate)
+                onSave = { updatedTask, updatedSubtasks ->
+                    viewModel.updateTaskFull(updatedTask)
+                    viewModel.updateSubtasks(updatedTask.id, updatedSubtasks)
                 }
             )
         }
@@ -291,12 +290,18 @@ fun EditTaskDialog(
     allCategories: List<com.antakih.taskpen.data.local.entities.CategoryEntity>,
     allTags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
     onDismiss: () -> Unit,
-    onSave: (title: String, desc: String, dueDate: Long?, categoryId: String?, subcategoryId: String?) -> Unit,
-    onSaveReminder: ((priority: Int, offsetMinutes: Int?, reminderMode: Int, customCascadeInterval: Int?, recurrenceInterval: Int?, maxOccurrences: Int?, endDate: Long?) -> Unit)? = null
+    onSave: (com.antakih.taskpen.data.local.entities.TaskEntity, List<com.antakih.taskpen.data.local.entities.TaskEntity>) -> Unit
 ) {
     var title by remember { mutableStateOf(task.title) }
     var description by remember { mutableStateOf(task.description ?: "") }
     var dueDateMillis by remember { mutableStateOf(task.dueDate) }
+    var hasSpecificTime by remember { mutableStateOf(task.hasSpecificTime) }
+    var subtasks by remember { mutableStateOf(emptyList<com.antakih.taskpen.data.local.entities.TaskEntity>()) }
+    
+    LaunchedEffect(task.id) {
+        subtasks = kotlinx.coroutines.flow.first(viewModel.getSubtasks(task.id))
+    }
+
     var selectedCategoryId by remember { mutableStateOf(task.categoryId) }
     var selectedTagId by remember { mutableStateOf(task.subcategoryId) }
     var selectedPriority by remember { mutableIntStateOf(task.priority) }
@@ -357,12 +362,93 @@ fun EditTaskDialog(
                     Text(text = "Vence: $dateString", modifier = Modifier.weight(1f))
                     TextButton(onClick = { showDatePicker = true }) { Text("Cambiar") }
                     if (dueDateMillis != null) {
-                        IconButton(onClick = { dueDateMillis = null }) {
+                        IconButton(onClick = { 
+                            dueDateMillis = null
+                            hasSpecificTime = false
+                        }) {
                             Icon(Icons.Default.Clear, contentDescription = "Quitar fecha")
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // --- Subtareas ---
+                Text("Subtareas:", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                subtasks.forEachIndexed { index, subtask ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = subtask.title,
+                            onValueChange = { newTitle ->
+                                subtasks = subtasks.toMutableList().apply {
+                                    this[index] = subtask.copy(title = newTitle)
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        IconButton(onClick = {
+                            subtasks = subtasks.toMutableList().apply { removeAt(index) }
+                        }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Eliminar subtarea")
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                var newSubtaskName by remember { mutableStateOf("") }
+                OutlinedTextField(
+                    value = newSubtaskName,
+                    onValueChange = { newSubtaskName = it },
+                    label = { Text("Añadir subtarea") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onNext = {
+                            if (newSubtaskName.isNotBlank()) {
+                                subtasks = subtasks + com.antakih.taskpen.data.local.entities.TaskEntity(
+                                    id = UUID.randomUUID().toString(),
+                                    title = newSubtaskName.trim(),
+                                    description = null,
+                                    categoryId = task.categoryId,
+                                    subcategoryId = task.subcategoryId,
+                                    parentTaskId = task.id,
+                                    createdAt = System.currentTimeMillis(),
+                                    dueDate = task.dueDate,
+                                    hasSpecificTime = false,
+                                    isCompleted = false,
+                                    calendarEventId = null
+                                )
+                                newSubtaskName = ""
+                            }
+                        }
+                    ),
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            if (newSubtaskName.isNotBlank()) {
+                                subtasks = subtasks + com.antakih.taskpen.data.local.entities.TaskEntity(
+                                    id = UUID.randomUUID().toString(),
+                                    title = newSubtaskName.trim(),
+                                    description = null,
+                                    categoryId = task.categoryId,
+                                    subcategoryId = task.subcategoryId,
+                                    parentTaskId = task.id,
+                                    createdAt = System.currentTimeMillis(),
+                                    dueDate = task.dueDate,
+                                    hasSpecificTime = false,
+                                    isCompleted = false,
+                                    calendarEventId = null
+                                )
+                                newSubtaskName = ""
+                            }
+                        }) {
+                            Icon(Icons.Default.Add, contentDescription = "Añadir")
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // --- Prioridad ---
                 Text("Prioridad", style = MaterialTheme.typography.labelLarge)
@@ -579,8 +665,22 @@ fun EditTaskDialog(
                     TextButton(onClick = onDismiss) { Text("Cancelar") }
                     Button(onClick = {
                         if (title.isNotBlank()) {
-                            onSave(title.trim(), description.trim(), dueDateMillis, selectedCategoryId, selectedTagId)
-                            onSaveReminder?.invoke(selectedPriority, customOffsetValue, selectedReminderMode, customCascadeValue, customRecurrenceValue, recurrenceMaxOccurrences, recurrenceEndDate)
+                            val updatedTask = task.copy(
+                                title = title.trim(),
+                                description = description.trim().takeIf { it.isNotBlank() },
+                                dueDate = dueDateMillis,
+                                hasSpecificTime = hasSpecificTime,
+                                priority = selectedPriority,
+                                reminderMode = selectedReminderMode,
+                                reminderOffsetMinutes = customOffsetValue,
+                                customCascadeIntervalMinutes = customCascadeValue,
+                                recurrenceIntervalMinutes = customRecurrenceValue,
+                                recurrenceMaxOccurrences = recurrenceMaxOccurrences,
+                                recurrenceEndDate = recurrenceEndDate,
+                                categoryId = selectedCategoryId,
+                                subcategoryId = selectedTagId
+                            )
+                            onSave(updatedTask, subtasks)
                             onDismiss()
                         }
                     }) { Text("Guardar") }
@@ -642,6 +742,7 @@ fun EditTaskDialog(
                     cal.set(java.util.Calendar.SECOND, 0)
                     cal.set(java.util.Calendar.MILLISECOND, 0)
                     dueDateMillis = cal.timeInMillis
+                    hasSpecificTime = true
                     showTimePicker = false
                 }) { Text("Aceptar") }
             },

@@ -399,6 +399,17 @@ class TaskViewModel @Inject constructor(
         }
     }
 
+    fun updateTaskFull(updatedTask: com.antakih.taskpen.data.local.entities.TaskEntity) {
+        viewModelScope.launch {
+            taskDao.insertTask(updatedTask)
+            if (updatedTask.dueDate != null && !updatedTask.isCompleted) {
+                taskAlarmScheduler.scheduleAlarm(updatedTask)
+            } else {
+                taskAlarmScheduler.cancelAlarm(updatedTask.id)
+            }
+        }
+    }
+
     fun updateTaskDetails(id: String, title: String, description: String?, dueDate: Long?, categoryId: String?, subcategoryId: String?, hasSpecificTime: Boolean? = null) {
         viewModelScope.launch {
             val allTasks = taskDao.getAllActiveTasks().first()
@@ -497,6 +508,17 @@ class TaskViewModel @Inject constructor(
     fun setDefaultTaskTimeCustom(hour: Int, minute: Int) {
         viewModelScope.launch {
             settingsManager.setDefaultTaskTime(1, hour, minute)
+        }
+    }
+
+    fun updateSubtasks(parentTaskId: String, subtasks: List<com.antakih.taskpen.data.local.entities.TaskEntity>) {
+        viewModelScope.launch {
+            val currentSubtasks = taskDao.getSubtasksOnce(parentTaskId)
+            val newIds = subtasks.map { it.id }
+            currentSubtasks.forEach { old ->
+                if (old.id !in newIds) taskDao.permanentlyDeleteTask(old.id)
+            }
+            subtasks.forEach { taskDao.insertTask(it) }
         }
     }
 
