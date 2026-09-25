@@ -57,6 +57,24 @@ import com.antakih.taskpen.ui.utils.groupTasksChronologically
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
 import com.antakih.taskpen.ui.viewmodel.ViewContext
 
+private fun getUtcMidnightForLocal(localMillis: Long): Long {
+    val localCal = java.util.Calendar.getInstance().apply { timeInMillis = localMillis }
+    val utcCal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+        clear()
+        set(localCal.get(java.util.Calendar.YEAR), localCal.get(java.util.Calendar.MONTH), localCal.get(java.util.Calendar.DAY_OF_MONTH))
+    }
+    return utcCal.timeInMillis
+}
+
+private fun getLocalMidnightFromUtc(utcMillis: Long): Long {
+    val utcCal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMillis }
+    val localCal = java.util.Calendar.getInstance().apply {
+        clear()
+        set(utcCal.get(java.util.Calendar.YEAR), utcCal.get(java.util.Calendar.MONTH), utcCal.get(java.util.Calendar.DAY_OF_MONTH))
+    }
+    return localCal.timeInMillis
+}
+
 sealed class MainPaneState {
     object TaskList : MainPaneState()
     data class TaskDetail(val task: com.antakih.taskpen.data.local.entities.TaskEntity) : MainPaneState()
@@ -616,12 +634,12 @@ fun DashboardScreen(
     // Modal Bottom Sheets and Dialogs instances...
     
     if (showRescheduleDatePicker && taskToReschedule != null) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = rescheduleDateMillis)
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = getUtcMidnightForLocal(rescheduleDateMillis ?: System.currentTimeMillis()))
         DatePickerDialog(
             onDismissRequest = { showRescheduleDatePicker = false; taskToReschedule = null },
             confirmButton = {
                 TextButton(onClick = {
-                    rescheduleDateMillis = datePickerState.selectedDateMillis
+                    rescheduleDateMillis = datePickerState.selectedDateMillis?.let { getLocalMidnightFromUtc(it) }
                     showRescheduleDatePicker = false
                     showRescheduleTimePicker = true
                 }) { Text("Siguiente") }
@@ -635,11 +653,25 @@ fun DashboardScreen(
     }
 
     if (showRescheduleTimePicker && taskToReschedule != null) {
+        val defaultHour by viewModel.defaultTaskTimeHour.collectAsState(initial = 9)
+        val defaultMinute by viewModel.defaultTaskTimeMinute.collectAsState(initial = 0)
+        
         val cal = Calendar.getInstance()
         if (rescheduleDateMillis != null) cal.timeInMillis = rescheduleDateMillis!!
+        
+        val initH = if (taskToReschedule!!.hasSpecificTime == true && taskToReschedule!!.dueDate != null) {
+            val tCal = Calendar.getInstance().apply { timeInMillis = taskToReschedule!!.dueDate!! }
+            tCal.get(Calendar.HOUR_OF_DAY)
+        } else defaultHour
+        
+        val initM = if (taskToReschedule!!.hasSpecificTime == true && taskToReschedule!!.dueDate != null) {
+            val tCal = Calendar.getInstance().apply { timeInMillis = taskToReschedule!!.dueDate!! }
+            tCal.get(Calendar.MINUTE)
+        } else defaultMinute
+
         val timePickerState = rememberTimePickerState(
-            initialHour = cal.get(Calendar.HOUR_OF_DAY),
-            initialMinute = cal.get(Calendar.MINUTE)
+            initialHour = initH,
+            initialMinute = initM
         )
         AlertDialog(
             onDismissRequest = { showRescheduleTimePicker = false; taskToReschedule = null },
@@ -657,7 +689,10 @@ fun DashboardScreen(
                 }) { Text("Guardar") }
             },
             dismissButton = {
-                TextButton(onClick = { showRescheduleTimePicker = false; taskToReschedule = null }) { Text("Cancelar") }
+                Row {
+                    TextButton(onClick = { showRescheduleTimePicker = false; taskToReschedule = null }) { Text("Cancelar") }
+                    TextButton(onClick = { showRescheduleTimePicker = false; showRescheduleDatePicker = true }) { Text("Atrás") }
+                }
             },
             text = { TimePicker(state = timePickerState) }
         )
@@ -1605,12 +1640,12 @@ fun ManualTaskSheet(
     }
     
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dueDateMillis ?: System.currentTimeMillis())
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = getUtcMidnightForLocal(dueDateMillis ?: System.currentTimeMillis()))
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    dueDateMillis = datePickerState.selectedDateMillis
+                    dueDateMillis = datePickerState.selectedDateMillis?.let { getLocalMidnightFromUtc(it) }
                     if (dueDateMillis == null) hasTime = false
                     showDatePicker = false
                 }) { Text("Aceptar") }
@@ -1624,7 +1659,10 @@ fun ManualTaskSheet(
     }
 
     if (showTimePicker) {
-        val timePickerState = rememberTimePickerState()
+        val defaultHour by viewModel.defaultTaskTimeHour.collectAsState(initial = 9)
+        val defaultMinute by viewModel.defaultTaskTimeMinute.collectAsState(initial = 0)
+        
+        val timePickerState = rememberTimePickerState(initialHour = defaultHour, initialMinute = defaultMinute)
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
             confirmButton = {
@@ -1641,19 +1679,22 @@ fun ManualTaskSheet(
                 }) { Text("Aceptar") }
             },
             dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) { Text("Cancelar") }
+                Row {
+                    TextButton(onClick = { showTimePicker = false }) { Text("Cancelar") }
+                    TextButton(onClick = { showTimePicker = false; showDatePicker = true }) { Text("Atrás") }
+                }
             },
             text = { TimePicker(state = timePickerState) }
         )
     }
 
     if (showRecurrenceDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = recurrenceEndDate ?: (System.currentTimeMillis() + 86400000L))
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = getUtcMidnightForLocal(recurrenceEndDate ?: (System.currentTimeMillis() + 86400000L)))
         DatePickerDialog(
             onDismissRequest = { showRecurrenceDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    recurrenceEndDate = datePickerState.selectedDateMillis
+                    recurrenceEndDate = datePickerState.selectedDateMillis?.let { getLocalMidnightFromUtc(it) }
                     showRecurrenceDatePicker = false
                 }) { Text("Aceptar") }
             },

@@ -37,6 +37,7 @@ data class FilterState(
 )
 
 sealed class ViewContext {
+    
     object General : ViewContext()
     object Today : ViewContext()
     object Tomorrow : ViewContext()

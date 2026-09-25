@@ -36,6 +36,24 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
+private fun getUtcMidnightForLocal(localMillis: Long): Long {
+    val localCal = java.util.Calendar.getInstance().apply { timeInMillis = localMillis }
+    val utcCal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+        clear()
+        set(localCal.get(java.util.Calendar.YEAR), localCal.get(java.util.Calendar.MONTH), localCal.get(java.util.Calendar.DAY_OF_MONTH))
+    }
+    return utcCal.timeInMillis
+}
+
+private fun getLocalMidnightFromUtc(utcMillis: Long): Long {
+    val utcCal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMillis }
+    val localCal = java.util.Calendar.getInstance().apply {
+        clear()
+        set(utcCal.get(java.util.Calendar.YEAR), utcCal.get(java.util.Calendar.MONTH), utcCal.get(java.util.Calendar.DAY_OF_MONTH))
+    }
+    return localCal.timeInMillis
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskDetailScreen(
@@ -225,6 +243,7 @@ fun TaskDetailScreen(
         if (showEditDialog) {
             val allCategories by viewModel.allCategories.collectAsState()
             EditTaskDialog(
+                viewModel = viewModel,
                 task = task,
                 allCategories = allCategories,
                 allTags = allTags,
@@ -267,6 +286,7 @@ private fun SubtaskRow(subtask: TaskEntity, onComplete: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditTaskDialog(
+    viewModel: com.antakih.taskpen.ui.viewmodel.TaskViewModel,
     task: com.antakih.taskpen.data.local.entities.TaskEntity,
     allCategories: List<com.antakih.taskpen.data.local.entities.CategoryEntity>,
     allTags: List<com.antakih.taskpen.data.local.entities.SubjectEntity>,
@@ -557,12 +577,14 @@ fun EditTaskDialog(
     }
 
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dueDateMillis ?: System.currentTimeMillis())
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = getUtcMidnightForLocal(dueDateMillis ?: System.currentTimeMillis()))
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    dueDateMillis = datePickerState.selectedDateMillis
+                    datePickerState.selectedDateMillis?.let { utc ->
+                        dueDateMillis = getLocalMidnightFromUtc(utc)
+                    }
                     showDatePicker = false
                     showTimePicker = true // Automatically open time picker after date
                 }) { Text("Siguiente") }
@@ -576,13 +598,27 @@ fun EditTaskDialog(
     }
 
     if (showTimePicker) {
+        val defaultHour by viewModel.defaultTaskTimeHour.collectAsState(initial = 9)
+        val defaultMinute by viewModel.defaultTaskTimeMinute.collectAsState(initial = 0)
+        
+        val initHour: Int
+        val initMinute: Int
+        if (task.hasSpecificTime && task.dueDate != null) {
+            val taskCal = java.util.Calendar.getInstance().apply { timeInMillis = task.dueDate }
+            initHour = taskCal.get(java.util.Calendar.HOUR_OF_DAY)
+            initMinute = taskCal.get(java.util.Calendar.MINUTE)
+        } else {
+            initHour = defaultHour
+            initMinute = defaultMinute
+        }
+
         val cal = java.util.Calendar.getInstance()
         if (dueDateMillis != null) {
             cal.timeInMillis = dueDateMillis!!
         }
         val timePickerState = androidx.compose.material3.rememberTimePickerState(
-            initialHour = cal.get(java.util.Calendar.HOUR_OF_DAY),
-            initialMinute = cal.get(java.util.Calendar.MINUTE)
+            initialHour = initHour,
+            initialMinute = initMinute
         )
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
@@ -590,12 +626,17 @@ fun EditTaskDialog(
                 TextButton(onClick = {
                     cal.set(java.util.Calendar.HOUR_OF_DAY, timePickerState.hour)
                     cal.set(java.util.Calendar.MINUTE, timePickerState.minute)
+                    cal.set(java.util.Calendar.SECOND, 0)
+                    cal.set(java.util.Calendar.MILLISECOND, 0)
                     dueDateMillis = cal.timeInMillis
                     showTimePicker = false
                 }) { Text("Aceptar") }
             },
             dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) { Text("Cancelar") }
+                Row {
+                    TextButton(onClick = { showTimePicker = false }) { Text("Cancelar") }
+                    TextButton(onClick = { showTimePicker = false; showDatePicker = true }) { Text("Atrás") }
+                }
             },
             text = {
                 androidx.compose.material3.TimePicker(state = timePickerState)
@@ -604,12 +645,12 @@ fun EditTaskDialog(
     }
 
     if (showRecurrenceDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = recurrenceEndDate ?: (System.currentTimeMillis() + 86400000L))
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = getUtcMidnightForLocal(recurrenceEndDate ?: (System.currentTimeMillis() + 86400000L)))
         DatePickerDialog(
             onDismissRequest = { showRecurrenceDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    recurrenceEndDate = datePickerState.selectedDateMillis
+                    recurrenceEndDate = datePickerState.selectedDateMillis?.let { getLocalMidnightFromUtc(it) }
                     showRecurrenceDatePicker = false
                 }) { Text("Aceptar") }
             },
