@@ -14,6 +14,8 @@ import com.antakih.taskpen.notifications.SummaryScheduler
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 /**
  * Pantalla de Configuración expandida.
@@ -58,6 +60,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .padding(padding)
                 .padding(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             // Sección: General
             Text(
@@ -373,6 +376,108 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Sección: Cascadas
+            Text(
+                "CONFIGURACIÓN DE CASCADAS",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            val cascadeLow by settingsManager.cascadeLow.collectAsState()
+            val cascadeMedium by settingsManager.cascadeMedium.collectAsState()
+            val cascadeHigh by settingsManager.cascadeHigh.collectAsState()
+
+            var cascadeDialogPriority by remember { mutableStateOf<Int?>(null) }
+            var cascadeDialogValue by remember { mutableStateOf("") }
+            var cascadeDialogError by remember { mutableStateOf(false) }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    listOf(
+                        Triple(0, "Baja", cascadeLow),
+                        Triple(1, "Media", cascadeMedium),
+                        Triple(2, "Alta", cascadeHigh)
+                    ).forEachIndexed { index, triple ->
+                        val (priority, label, value) = triple
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    cascadeDialogPriority = priority
+                                    cascadeDialogValue = value
+                                    cascadeDialogError = false
+                                }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Prioridad $label", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    value,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                        if (index < 2) {
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        }
+                    }
+                }
+            }
+
+            if (cascadeDialogPriority != null) {
+                AlertDialog(
+                    onDismissRequest = { cascadeDialogPriority = null },
+                    title = { Text("Configurar cascada") },
+                    text = {
+                        Column {
+                            OutlinedTextField(
+                                value = cascadeDialogValue,
+                                onValueChange = { 
+                                    cascadeDialogValue = it
+                                    cascadeDialogError = false
+                                },
+                                label = { Text("Intervalos") },
+                                isError = cascadeDialogError,
+                                supportingText = {
+                                    if (cascadeDialogError) {
+                                        Text("Debe contener entre 3 y 6 términos válidos (ej. 3d, 12h, 30m)")
+                                    } else {
+                                        Text("Ejemplo: 3d, 2d, 1d, 12h, 6h")
+                                    }
+                                }
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val terms = cascadeDialogValue.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                            val valid = terms.size in 3..6 && terms.all { term ->
+                                val value = term.dropLast(1).toLongOrNull()
+                                val unit = term.lastOrNull()?.lowercaseChar()
+                                value != null && value > 0 && unit in listOf('d', 'h', 'm')
+                            }
+                            if (valid) {
+                                scope.launch {
+                                    settingsManager.setCascadeIntervals(cascadeDialogPriority!!, terms.joinToString(","))
+                                }
+                                cascadeDialogPriority = null
+                            } else {
+                                cascadeDialogError = true
+                            }
+                        }) { Text("Guardar") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { cascadeDialogPriority = null }) { Text("Cancelar") }
+                    }
+                )
             }
         }
     }

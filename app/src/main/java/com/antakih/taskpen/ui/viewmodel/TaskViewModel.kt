@@ -333,7 +333,17 @@ class TaskViewModel @Inject constructor(
 
     fun toggleTaskImportance(taskId: String, isImportant: Boolean) {
         viewModelScope.launch {
-            try { taskDao.updateTaskImportance(taskId, isImportant) }
+            try { 
+                taskDao.updateTaskImportance(taskId, isImportant) 
+                if (isImportant) {
+                    val task = taskDao.getTaskById(taskId)
+                    if (task != null && task.reminderMode == 1 && task.customCascadeIntervalMinutes == null && task.priority < 2) {
+                        val updatedTask = task.copy(isImportant = true, priority = 2)
+                        taskDao.insertTask(updatedTask)
+                        taskAlarmScheduler.scheduleAlarm(updatedTask)
+                    }
+                }
+            }
             catch (e: Throwable) { Log.e("TaskPenML", "Error al actualizar importancia: ${e.message}", e) }
         }
     }

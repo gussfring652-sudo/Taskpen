@@ -37,10 +37,13 @@ import javax.inject.Singleton
  *   1-7d antes → alarma a dueDate-12h
  *   <24h antes → alarma a dueDate-1h
  */
+import com.antakih.taskpen.data.local.SettingsManager
+
 @Singleton
 class TaskAlarmScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val taskDao: TaskDao
+    private val taskDao: TaskDao,
+    private val settingsManager: SettingsManager
 ) {
     companion object {
         private const val TAG = "TaskAlarmScheduler"
@@ -177,22 +180,27 @@ class TaskAlarmScheduler @Inject constructor(
      * disparar la alarma.
      */
     private fun getCascadeOffsets(priority: Int): List<Long> {
-        return when (priority) {
-            2 -> listOf(  // Alta
-                7 * DAY,  // 7 días antes
-                3 * DAY,  // 3 días antes
-                12 * HOUR // 12 horas antes
-            )
-            1 -> listOf(  // Media
-                2 * DAY,  // 2 días antes
-                1 * DAY,  // 1 día antes
-                4 * HOUR  // 4 horas antes
-            )
-            else -> listOf( // Baja (0)
-                1 * DAY,   // 1 día antes
-                12 * HOUR, // 12 horas antes
-                1 * HOUR   // 1 hora antes
-            )
+        val intervalsStr = when (priority) {
+            2 -> settingsManager.cascadeHigh.value
+            1 -> settingsManager.cascadeMedium.value
+            else -> settingsManager.cascadeLow.value
+        }
+        
+        return intervalsStr.split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .mapNotNull { parseInterval(it) }
+            .sortedDescending()
+    }
+
+    private fun parseInterval(interval: String): Long? {
+        val value = interval.dropLast(1).toLongOrNull() ?: return null
+        val unit = interval.last()
+        return when (unit) {
+            'd', 'D' -> value * DAY
+            'h', 'H' -> value * HOUR
+            'm', 'M' -> value * MINUTE
+            else -> null
         }
     }
 

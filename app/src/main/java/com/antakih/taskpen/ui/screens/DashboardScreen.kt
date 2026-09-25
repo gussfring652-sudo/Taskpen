@@ -245,6 +245,13 @@ fun DashboardScreen(
                                     Icon(Icons.Default.DoneAll, contentDescription = "Completar seleccionadas")
                                 }
                                 IconButton(onClick = {
+                                    selectedTasks.forEach { viewModel.toggleTaskImportance(it, true) }
+                                    isSelectionMode = false
+                                    selectedTasks = emptySet()
+                                }) {
+                                    Icon(Icons.Filled.Star, contentDescription = "Marcar como importante")
+                                }
+                                IconButton(onClick = {
                                     selectedTasks.forEach { viewModel.moveToTrash(it) }
                                     isSelectionMode = false
                                     selectedTasks = emptySet()
@@ -1037,9 +1044,19 @@ fun TaskCard(
                                     1 -> "Media"
                                     else -> "Baja"
                                 }
+                                val prioColor = when (task.priority) {
+                                    2 -> Color(0xFFD32F2F)
+                                    1 -> Color(0xFFFFB300)
+                                    else -> Color(0xFF4CAF50)
+                                }
                                 AssistChip(
                                     onClick = {},
-                                    label = { Text("Prioridad: $prioStr", style = MaterialTheme.typography.labelSmall) }
+                                    label = { Text("Prioridad: $prioStr", style = MaterialTheme.typography.labelSmall) },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = prioColor.copy(alpha = 0.15f),
+                                        labelColor = prioColor
+                                    ),
+                                    border = AssistChipDefaults.assistChipBorder(borderColor = prioColor.copy(alpha = 0.5f), enabled = true)
                                 )
                             }
                         }
@@ -1098,8 +1115,10 @@ fun TagsDialog(
     var editingTagId by remember { mutableStateOf<String?>(null) }
     var tagName by remember { mutableStateOf("") }
     var tagAliases by remember { mutableStateOf("") }
-    var selectedCategoryId by remember { mutableStateOf<String?>(currentCategoryId) }
-    var categoryExpanded by remember { mutableStateOf(false) }
+    var showAddForm by remember { mutableStateOf(false) }
+
+    val filteredTags = tags.filter { it.categoryId == currentCategoryId }
+    val categoryName = categories.find { it.id == currentCategoryId }?.name ?: "Globales"
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -1107,106 +1126,19 @@ fun TagsDialog(
             shape = MaterialTheme.shapes.large
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(if (editingTagId == null) "Nueva Etiqueta" else "Editar Etiqueta", style = MaterialTheme.typography.titleLarge)
+                Text("Etiquetas ($categoryName)", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
-                
-                OutlinedTextField(
-                    value = tagName,
-                    onValueChange = { tagName = it },
-                    label = { Text("Nombre (Ej: Robótica)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = tagAliases,
-                    onValueChange = { tagAliases = it },
-                    label = { Text("Alias separados por coma") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Category selector
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = categories.find { it.id == selectedCategoryId }?.name ?: "Global (Sin Categoría)",
-                        onValueChange = { },
-                        readOnly = true,
-                        label = { Text("Categoría") },
-                        modifier = Modifier.fillMaxWidth(),
-                        trailingIcon = {
-                            IconButton(onClick = { categoryExpanded = !categoryExpanded }) {
-                                Icon(Icons.Default.ArrowDropDown, "Seleccionar")
-                            }
-                        }
-                    )
-                    DropdownMenu(
-                        expanded = categoryExpanded,
-                        onDismissRequest = { categoryExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Global (Sin Categoría)") },
-                            onClick = { 
-                                selectedCategoryId = null
-                                categoryExpanded = false 
-                            }
-                        )
-                        categories.forEach { cat ->
-                            DropdownMenuItem(
-                                text = { Text(cat.name) },
-                                onClick = { 
-                                    selectedCategoryId = cat.id
-                                    categoryExpanded = false 
-                                }
-                            )
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    if (editingTagId != null) {
-                        TextButton(onClick = {
-                            editingTagId = null
-                            tagName = ""
-                            tagAliases = ""
-                            selectedCategoryId = currentCategoryId
-                        }) {
-                            Text("Cancelar Edición")
-                        }
-                    }
-                    Button(
-                        onClick = {
-                            if (tagName.isNotBlank()) {
-                                val aliasesList = tagAliases.split(",")
-                                    .map { it.trim().lowercase() }
-                                    .filter { it.isNotEmpty() }
-                                if (editingTagId == null) {
-                                    onAddTag(selectedCategoryId, tagName.trim(), aliasesList)
-                                } else {
-                                    onUpdateTag(editingTagId!!, selectedCategoryId, tagName.trim(), aliasesList)
-                                    editingTagId = null
-                                }
-                                tagName = ""
-                                tagAliases = ""
-                                selectedCategoryId = currentCategoryId
-                            }
-                        }
-                    ) {
-                        Text(if (editingTagId == null) "Añadir" else "Guardar")
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Etiquetas actuales:", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
                 
                 LazyColumn(modifier = Modifier.fillMaxHeight(0.5f)) {
-                    items(tags, key = { it.id }) { tag ->
+                    if (filteredTags.isEmpty()) {
+                        item {
+                            Text("No hay etiquetas en esta categoría.", color = Color.Gray, modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                    }
+                    items(filteredTags, key = { it.id }) { tag ->
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(tag.fullName, style = MaterialTheme.typography.bodyLarge)
-                                val catName = categories.find { it.id == tag.categoryId }?.name ?: "Global"
-                                Text(catName, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                                 if (tag.aliases.isNotEmpty()) {
                                     Text(tag.aliases.joinToString(", "), style = MaterialTheme.typography.bodySmall, color = Color.Gray.copy(alpha = 0.7f))
                                 }
@@ -1215,7 +1147,7 @@ fun TagsDialog(
                                 editingTagId = tag.id
                                 tagName = tag.fullName
                                 tagAliases = tag.aliases.joinToString(", ")
-                                selectedCategoryId = tag.categoryId
+                                showAddForm = true
                             }) {
                                 Icon(Icons.Default.Edit, contentDescription = "Editar", modifier = Modifier.size(20.dp))
                             }
@@ -1225,6 +1157,68 @@ fun TagsDialog(
                         }
                     }
                 }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (!showAddForm) {
+                    OutlinedButton(
+                        onClick = {
+                            editingTagId = null
+                            tagName = ""
+                            tagAliases = ""
+                            showAddForm = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Añadir Etiqueta")
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = tagName,
+                        onValueChange = { tagName = it },
+                        label = { Text("Nombre (Ej: Robótica)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = tagAliases,
+                        onValueChange = { tagAliases = it },
+                        label = { Text("Alias separados por coma") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = {
+                            showAddForm = false
+                            editingTagId = null
+                            tagName = ""
+                            tagAliases = ""
+                        }) {
+                            Text("Cancelar")
+                        }
+                        Button(
+                            onClick = {
+                                if (tagName.isNotBlank()) {
+                                    val aliasesList = tagAliases.split(",")
+                                        .map { it.trim().lowercase() }
+                                        .filter { it.isNotEmpty() }
+                                    if (editingTagId == null) {
+                                        onAddTag(currentCategoryId, tagName.trim(), aliasesList)
+                                    } else {
+                                        onUpdateTag(editingTagId!!, currentCategoryId, tagName.trim(), aliasesList)
+                                        editingTagId = null
+                                    }
+                                    tagName = ""
+                                    tagAliases = ""
+                                    showAddForm = false
+                                }
+                            }
+                        ) {
+                            Text(if (editingTagId == null) "Añadir" else "Guardar")
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
                 TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
                     Text("Cerrar")

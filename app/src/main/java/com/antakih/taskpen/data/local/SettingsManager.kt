@@ -28,6 +28,9 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
         val DEFAULT_TASK_TIME_MODE = intPreferencesKey("default_task_time_mode")
         val DEFAULT_TASK_TIME_HOUR = intPreferencesKey("default_task_time_hour")
         val DEFAULT_TASK_TIME_MINUTE = intPreferencesKey("default_task_time_minute")
+        val CASCADE_LOW = stringPreferencesKey("cascade_low")
+        val CASCADE_MEDIUM = stringPreferencesKey("cascade_medium")
+        val CASCADE_HIGH = stringPreferencesKey("cascade_high")
     }
 
     val isCaseSensitiveTags: StateFlow<Boolean> = context.dataStore.data
@@ -44,6 +47,18 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
     val defaultTaskTimeMode: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_TIME_MODE] ?: 0 }
     val defaultTaskTimeHour: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_TIME_HOUR] ?: 9 }
     val defaultTaskTimeMinute: Flow<Int> = context.dataStore.data.map { it[Keys.DEFAULT_TASK_TIME_MINUTE] ?: 0 }
+
+    val cascadeLow: StateFlow<String> = context.dataStore.data
+        .map { it[Keys.CASCADE_LOW] ?: "3d,2d,1d" }
+        .stateIn(scope, SharingStarted.Eagerly, "3d,2d,1d")
+
+    val cascadeMedium: StateFlow<String> = context.dataStore.data
+        .map { it[Keys.CASCADE_MEDIUM] ?: "3d,2d,1d,12h,6h" }
+        .stateIn(scope, SharingStarted.Eagerly, "3d,2d,1d,12h,6h")
+
+    val cascadeHigh: StateFlow<String> = context.dataStore.data
+        .map { it[Keys.CASCADE_HIGH] ?: "3d,2d,1d,12h,6h,3h,1h" }
+        .stateIn(scope, SharingStarted.Eagerly, "3d,2d,1d,12h,6h,3h,1h")
 
     fun setCaseSensitiveTags(value: Boolean) {
         scope.launch {
@@ -88,6 +103,16 @@ class SettingsManager @Inject constructor(@ApplicationContext private val contex
             it[Keys.DEFAULT_TASK_TIME_MODE] = mode
             it[Keys.DEFAULT_TASK_TIME_HOUR] = hour
             it[Keys.DEFAULT_TASK_TIME_MINUTE] = minute
+        }
+    }
+
+    suspend fun setCascadeIntervals(priority: Int, intervalsStr: String) {
+        context.dataStore.edit {
+            when (priority) {
+                0 -> it[Keys.CASCADE_LOW] = intervalsStr
+                1 -> it[Keys.CASCADE_MEDIUM] = intervalsStr
+                2 -> it[Keys.CASCADE_HIGH] = intervalsStr
+            }
         }
     }
 }
