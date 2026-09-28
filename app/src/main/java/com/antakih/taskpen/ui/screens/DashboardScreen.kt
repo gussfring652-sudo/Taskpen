@@ -720,24 +720,28 @@ fun DashboardScreen(
     }
 
     if (showDailyReport) {
-        val todayTasks = activeTasks.filter { 
-            val dueDate = it.dueDate
+        val isEvening = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) >= 15
+        val targetCal = Calendar.getInstance()
+        if (isEvening) targetCal.add(Calendar.DAY_OF_YEAR, 1)
+        val targetYear = targetCal.get(Calendar.YEAR)
+        val targetDay = targetCal.get(Calendar.DAY_OF_YEAR)
+
+        val todayTasks = activeTasks.filter { task ->
+            if (task.isImportant) return@filter true
+            val dueDate = task.dueDate
             if (dueDate == null) false
             else {
                 val cal = Calendar.getInstance()
-                cal.timeInMillis = System.currentTimeMillis()
-                val todayYear = cal.get(Calendar.YEAR)
-                val todayDay = cal.get(Calendar.DAY_OF_YEAR)
                 cal.timeInMillis = dueDate
-                cal.get(Calendar.YEAR) == todayYear && cal.get(Calendar.DAY_OF_YEAR) == todayDay
+                cal.get(Calendar.YEAR) == targetYear && cal.get(Calendar.DAY_OF_YEAR) == targetDay
             }
-        }
+        }.sortedBy { it.dueDate ?: 0L }
         AlertDialog(
             onDismissRequest = { showDailyReport = false; onDismissDailyReport() },
-            title = { Text("Reporte Diario", fontWeight = FontWeight.Bold) },
+            title = { Text(if (isEvening) "Reporte Diario (Mañana)" else "Reporte Diario", fontWeight = FontWeight.Bold) },
             text = {
                 if (todayTasks.isEmpty()) {
-                    Text("No tienes tareas pendientes para hoy.")
+                    Text(if (isEvening) "No tienes tareas pendientes para mañana." else "No tienes tareas pendientes para hoy.")
                 } else {
                     LazyColumn {
                         items(todayTasks) { task ->

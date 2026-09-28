@@ -299,7 +299,7 @@ fun EditTaskDialog(
     var subtasks by remember { mutableStateOf(emptyList<com.antakih.taskpen.data.local.entities.TaskEntity>()) }
     
     LaunchedEffect(task.id) {
-        subtasks = kotlinx.coroutines.flow.first(viewModel.getSubtasks(task.id))
+        subtasks = viewModel.getSubtasks(task.id).first()
     }
 
     var selectedCategoryId by remember { mutableStateOf(task.categoryId) }
@@ -457,6 +457,7 @@ fun EditTaskDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val priorityEnabled = !(dueDateMillis != null && selectedReminderMode == 0)
                     priorityLabels.forEachIndexed { index, label ->
                         FilterChip(
                             selected = selectedPriority == index,
@@ -464,8 +465,11 @@ fun EditTaskDialog(
                             label = { Text(label) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = priorityColors[index].copy(alpha = 0.2f),
-                                selectedLabelColor = priorityColors[index]
+                                selectedLabelColor = priorityColors[index],
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                             ),
+                            enabled = priorityEnabled,
                             modifier = Modifier.weight(1f)
                         )
                     }

@@ -513,7 +513,7 @@ class TaskViewModel @Inject constructor(
 
     fun updateSubtasks(parentTaskId: String, subtasks: List<com.antakih.taskpen.data.local.entities.TaskEntity>) {
         viewModelScope.launch {
-            val currentSubtasks = taskDao.getSubtasksOnce(parentTaskId)
+            val currentSubtasks = taskDao.getSubtasks(parentTaskId).first()
             val newIds = subtasks.map { it.id }
             currentSubtasks.forEach { old ->
                 if (old.id !in newIds) taskDao.permanentlyDeleteTask(old.id)
