@@ -725,8 +725,10 @@ fun DashboardScreen(
         if (isEvening) targetCal.add(Calendar.DAY_OF_YEAR, 1)
         val targetYear = targetCal.get(Calendar.YEAR)
         val targetDay = targetCal.get(Calendar.DAY_OF_YEAR)
+        
+        val dateHeaderStr = if (isEvening) "Mañana" else "Hoy"
 
-        val todayTasks = activeTasks.filter { task ->
+        val relevantTasks = activeTasks.filter { !it.isCompleted }.filter { task ->
             if (task.isImportant) return@filter true
             val dueDate = task.dueDate
             if (dueDate == null) false
@@ -736,23 +738,55 @@ fun DashboardScreen(
                 cal.get(Calendar.YEAR) == targetYear && cal.get(Calendar.DAY_OF_YEAR) == targetDay
             }
         }.sortedBy { it.dueDate ?: 0L }
+
+        val scheduledTasks = relevantTasks.filter { task ->
+            val dueDate = task.dueDate
+            if (dueDate == null) false
+            else {
+                val cal = Calendar.getInstance()
+                cal.timeInMillis = dueDate
+                cal.get(Calendar.YEAR) == targetYear && cal.get(Calendar.DAY_OF_YEAR) == targetDay
+            }
+        }
+        val importantTasksWithoutTargetDate = relevantTasks.filter { it.isImportant && it !in scheduledTasks }
+
         AlertDialog(
             onDismissRequest = { showDailyReport = false; onDismissDailyReport() },
-            title = { Text(if (isEvening) "Reporte Diario (Mañana)" else "Reporte Diario", fontWeight = FontWeight.Bold) },
+            title = { Text(if (isEvening) "Reporte Diario ($dateHeaderStr)" else "Reporte Diario", fontWeight = FontWeight.Bold) },
             text = {
-                if (todayTasks.isEmpty()) {
+                if (relevantTasks.isEmpty()) {
                     Text(if (isEvening) "No tienes tareas pendientes para mañana." else "No tienes tareas pendientes para hoy.")
                 } else {
                     LazyColumn {
-                        items(todayTasks) { task ->
-                            ListItem(
-                                headlineContent = { Text(task.title) },
-                                leadingContent = { 
-                                    Checkbox(checked = task.isCompleted, onCheckedChange = { 
-                                        if (it) viewModel.completeTask(task.id) else viewModel.uncompleteTask(task.id) 
-                                    })
-                                }
-                            )
+                        if (scheduledTasks.isNotEmpty()) {
+                            item {
+                                Text(dateHeaderStr, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 8.dp))
+                            }
+                            items(scheduledTasks) { task ->
+                                ListItem(
+                                    headlineContent = { Text(task.title) },
+                                    leadingContent = { 
+                                        Checkbox(checked = task.isCompleted, onCheckedChange = { 
+                                            if (it) viewModel.completeTask(task.id) else viewModel.uncompleteTask(task.id) 
+                                        })
+                                    }
+                                )
+                            }
+                        }
+                        if (importantTasksWithoutTargetDate.isNotEmpty()) {
+                            item {
+                                Text("Importantes", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 8.dp))
+                            }
+                            items(importantTasksWithoutTargetDate) { task ->
+                                ListItem(
+                                    headlineContent = { Text(task.title) },
+                                    leadingContent = { 
+                                        Checkbox(checked = task.isCompleted, onCheckedChange = { 
+                                            if (it) viewModel.completeTask(task.id) else viewModel.uncompleteTask(task.id) 
+                                        })
+                                    }
+                                )
+                            }
                         }
                     }
                 }
