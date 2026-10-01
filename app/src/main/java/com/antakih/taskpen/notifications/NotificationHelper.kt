@@ -50,9 +50,10 @@ class NotificationHelper @Inject constructor(
         val summariesChannel = NotificationChannel(
             CHANNEL_SUMMARIES,
             context.getString(R.string.channel_summaries),
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = context.getString(R.string.channel_summaries_desc)
+            enableVibration(true)
         }
 
         notificationManager.createNotificationChannel(remindersChannel)
@@ -154,7 +155,7 @@ class NotificationHelper @Inject constructor(
                 .setSmallIcon(android.R.drawable.ic_menu_my_calendar)
                 .setContentTitle(title)
                 .setContentText(emptyMessage)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
                 .setContentIntent(contentIntent)
                 .build()
@@ -188,7 +189,7 @@ class NotificationHelper @Inject constructor(
             .setContentTitle(title)
             .setContentText(context.getString(R.string.tasks_remaining, tasks.size))
             .setStyle(inboxStyle)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(contentIntent)
             .build()

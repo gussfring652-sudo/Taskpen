@@ -142,7 +142,6 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
             Canvas(
                 modifier = Modifier
                     .size(2000.dp, 2000.dp) // Tamaño máximo fijo del lienzo
-                    .graphicsLayer(alpha = 0.99f)
                     .pointerInput(palmRejectionEnabled, isEraserMode) {
                     awaitEachGesture {
                         val down = awaitFirstDown()
