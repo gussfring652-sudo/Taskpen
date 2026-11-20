@@ -1,45 +1,65 @@
 package com.antakih.taskpen.ui.screens
 
-import android.os.Build
 import android.view.MotionEvent
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.input.pointer.PointerEvent
-import androidx.compose.ui.input.pointer.PointerType
-import androidx.compose.ui.input.pointer.isSecondaryPressed
-import androidx.compose.ui.input.pointer.isTertiaryPressed
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.input.pointer.RequestDisallowInterceptTouchEvent
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.unit.dp
 import com.antakih.taskpen.ui.viewmodel.TaskViewModel
 import com.google.mlkit.vision.digitalink.Ink
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 
-// Estructura para guardar un punto individual con su posición, grosor y timestamp para ML Kit
+// Estructura para guardar un punto individual con su posición, grosor, timestamp para ML Kit y presión
 data class PathPoint(
     val position: Offset,
     val width: Float,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val pressure: Float = 0.5f
 )
 
-// Estructura para guardar un trazo completo
+// Estructura para guardar un trazo completo (cachedPath fuera de equals/hashCode para preservar Undo/Redo)
 data class StrokeState(
     val points: List<PathPoint>,
-    val isEraser: Boolean = false // Mantenemos por compatibilidad, aunque ya no guardaremos trazos de borrador
-)
+    val isEraser: Boolean = false
+) {
+    var cachedPath: Path? = null
+
+    internal fun withCachedPath(path: Path): StrokeState {
+        return copy().also { it.cachedPath = path }
+    }
+}
+
+private class ActiveGestureTracker {
+    var isActive: Boolean = false
+    var activePointerId: Int = MotionEvent.INVALID_POINTER_ID
+    var isErasing: Boolean = false
+    var lastAcceptedPos: Offset? = null
+    var lastSmoothedPressure: Float = 0.5f
+    val currentPoints: MutableList<PathPoint> = mutableListOf()
+
+    fun reset() {
+        isActive = false
+        activePointerId = MotionEvent.INVALID_POINTER_ID
+        isErasing = false
+        lastAcceptedPos = null
+        lastSmoothedPressure = 0.5f
+        currentPoints.clear()
+    }
+}
 
 private fun strokeIntersects(stroke: StrokeState, eraserPos: Offset, eraserRadius: Float): Boolean {
     for (point in stroke.points) {
@@ -51,8 +71,13 @@ private fun strokeIntersects(stroke: StrokeState, eraserPos: Offset, eraserRadiu
     return false
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
+fun DrawingScreen(
+    viewModel: TaskViewModel,
+    onFinished: () -> Unit = {},
+    stylusOnly: Boolean = true
+) {
     // Memoria de trazos para renderizar en pantalla e historial para Undo/Redo
     var strokesHistory by remember { mutableStateOf(listOf(emptyList<StrokeState>())) }
     var historyIndex by remember { mutableIntStateOf(0) }
@@ -70,7 +95,9 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
 
     // Controles de estado
     var isEraserMode by remember { mutableStateOf(false) }
-    var palmRejectionEnabled by remember { mutableStateOf(true) }
+    var palmRejectionEnabled by remember(stylusOnly) { mutableStateOf(stylusOnly) }
+    val gestureTracker = remember { ActiveGestureTracker() }
+    val disallowIntercept = remember { RequestDisallowInterceptTouchEvent() }
 
     // Configuración de grosor base para el trazo
     val basePenWidth = 14f
@@ -142,97 +169,158 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
             Canvas(
                 modifier = Modifier
                     .size(2000.dp, 2000.dp) // Tamaño máximo fijo del lienzo
-                    .pointerInput(palmRejectionEnabled, isEraserMode) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown()
-
-                        if (palmRejectionEnabled && down.type == PointerType.Touch) {
-                            return@awaitEachGesture
+                    .pointerInteropFilter(requestDisallowInterceptTouchEvent = disallowIntercept) { event ->
+                        fun processWritingSample(x: Float, y: Float, rawPressure: Float, timestamp: Long) {
+                            val pos = Offset(x, y)
+                            if (!shouldAcceptPoint(gestureTracker.lastAcceptedPos, pos, MIN_POINT_DISTANCE_PX)) {
+                                return
+                            }
+                            val smoothed = smoothPressure(gestureTracker.lastSmoothedPressure, rawPressure)
+                            gestureTracker.lastSmoothedPressure = smoothed
+                            gestureTracker.lastAcceptedPos = pos
+                            val width = (MIN_STROKE_WIDTH_PX + basePenWidth * smoothed).coerceAtLeast(MIN_STROKE_WIDTH_PX)
+                            gestureTracker.currentPoints.add(PathPoint(pos, width, timestamp, smoothed))
                         }
 
-                        // Leemos el estado exacto del hardware en el instante del toque
-                        val event = awaitPointerEvent()
-
-                        // Detecta si el tipo es Eraser nativo o si el botón lateral del Stylus/S-Pen está presionado
-                        val isHardwareEraser = isStylusButtonPressed(event, down.type)
-                        val isActuallyErasing = isEraserMode || isHardwareEraser
-
-                        // Iniciamos estado activo basado en el historial actual
-                        activeStrokes = strokesHistory[historyIndex]
-
-                        // Calculamos el grosor según la presión recibida
-                        var lastWidth = if (isActuallyErasing) {
-                            eraserWidth
-                        } else {
-                            (2f + basePenWidth * down.pressure).coerceAtLeast(2f)
-                        }
-
-                        var currentStroke: StrokeState? = null
-
-                        if (isActuallyErasing) {
-                            activeStrokes = activeStrokes.filterNot { strokeIntersects(it, down.position, lastWidth / 2f) }
-                            currentStrokeState = StrokeState(emptyList(), true) // Usamos un trazo vacío como bandera de borrado activo
-                        } else {
-                            val initialPoint = PathPoint(down.position, lastWidth, System.currentTimeMillis())
-                            currentStroke = StrokeState(listOf(initialPoint), false)
-                            currentStrokeState = currentStroke
-                        }
-
-                        do {
-                            val dragEvent = awaitPointerEvent()
-                            val drag = dragEvent.changes.firstOrNull()
-                            if (drag != null) {
-                                val rawWidth = if (isActuallyErasing) {
-                                    eraserWidth
-                                } else {
-                                    (2f + basePenWidth * drag.pressure).coerceAtLeast(2f)
+                        when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                                if (gestureTracker.isActive) {
+                                    return@pointerInteropFilter true
                                 }
-                                // Filtro de suavizado
-                                val smoothedWidth = lastWidth * 0.7f + rawWidth * 0.3f
-                                lastWidth = smoothedWidth
+                                val actionIndex = event.actionIndex
+                                val toolType = event.getToolType(actionIndex)
+                                val isStylusTool = toolType == MotionEvent.TOOL_TYPE_STYLUS ||
+                                    toolType == MotionEvent.TOOL_TYPE_ERASER
+                                if (palmRejectionEnabled && !isStylusTool) {
+                                    return@pointerInteropFilter false
+                                }
 
-                                if (isActuallyErasing) {
+                                gestureTracker.reset()
+                                gestureTracker.isActive = true
+                                gestureTracker.activePointerId = event.getPointerId(actionIndex)
+                                gestureTracker.isErasing = isEraserMode ||
+                                    toolType == MotionEvent.TOOL_TYPE_ERASER ||
+                                    isMotionEventStylusButtonPressed(event)
+                                disallowIntercept(true)
+
+                                activeStrokes = strokesHistory[historyIndex]
+                                val startPos = Offset(event.getX(actionIndex), event.getY(actionIndex))
+
+                                if (gestureTracker.isErasing) {
+                                    activeStrokes = activeStrokes.filterNot {
+                                        strokeIntersects(it, startPos, eraserWidth / 2f)
+                                    }
+                                    currentStrokeState = StrokeState(emptyList(), true)
+                                } else {
+                                    val initialPressure = normalizePressure(event.getPressure(actionIndex))
+                                    val initialWidth = (MIN_STROKE_WIDTH_PX + basePenWidth * initialPressure)
+                                        .coerceAtLeast(MIN_STROKE_WIDTH_PX)
+                                    gestureTracker.lastAcceptedPos = startPos
+                                    gestureTracker.lastSmoothedPressure = initialPressure
+                                    gestureTracker.currentPoints.add(
+                                        PathPoint(startPos, initialWidth, event.eventTime, initialPressure)
+                                    )
+                                    currentStrokeState = StrokeState(gestureTracker.currentPoints.toList(), false)
+                                }
+                                true
+                            }
+
+                            MotionEvent.ACTION_MOVE -> {
+                                if (!gestureTracker.isActive) return@pointerInteropFilter false
+                                val idx = event.findPointerIndex(gestureTracker.activePointerId)
+                                if (idx == -1) return@pointerInteropFilter true
+
+                                if (gestureTracker.isErasing) {
                                     var filtered = activeStrokes
-                                    drag.historical.forEach { hist ->
-                                        filtered = filtered.filterNot { strokeIntersects(it, hist.position, smoothedWidth / 2f) }
+                                    for (i in 0 until event.historySize) {
+                                        val histPos = Offset(event.getHistoricalX(idx, i), event.getHistoricalY(idx, i))
+                                        filtered = filtered.filterNot {
+                                            strokeIntersects(it, histPos, eraserWidth / 2f)
+                                        }
                                     }
-                                    activeStrokes = filtered.filterNot { strokeIntersects(it, drag.position, smoothedWidth / 2f) }
+                                    val currPos = Offset(event.getX(idx), event.getY(idx))
+                                    activeStrokes = filtered.filterNot {
+                                        strokeIntersects(it, currPos, eraserWidth / 2f)
+                                    }
                                 } else {
-                                    val newPoints = drag.historical.map { hist ->
-                                        PathPoint(hist.position, smoothedWidth, hist.uptimeMillis)
-                                    } + PathPoint(drag.position, smoothedWidth, drag.uptimeMillis)
-                                    
-                                    currentStroke?.let {
-                                        currentStroke = it.copy(points = it.points + newPoints)
-                                        currentStrokeState = currentStroke
+                                    val prevCount = gestureTracker.currentPoints.size
+                                    for (i in 0 until event.historySize) {
+                                        processWritingSample(
+                                            x = event.getHistoricalX(idx, i),
+                                            y = event.getHistoricalY(idx, i),
+                                            rawPressure = event.getHistoricalPressure(idx, i),
+                                            timestamp = event.getHistoricalEventTime(i)
+                                        )
+                                    }
+                                    processWritingSample(
+                                        x = event.getX(idx),
+                                        y = event.getY(idx),
+                                        rawPressure = event.getPressure(idx),
+                                        timestamp = event.eventTime
+                                    )
+                                    if (gestureTracker.currentPoints.size != prevCount) {
+                                        currentStrokeState = StrokeState(gestureTracker.currentPoints.toList(), false)
+                                    }
+                                }
+                                true
+                            }
+
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                                if (!gestureTracker.isActive) return@pointerInteropFilter false
+                                val actionIndex = event.actionIndex
+                                if (event.getPointerId(actionIndex) != gestureTracker.activePointerId) {
+                                    return@pointerInteropFilter true
+                                }
+
+                                if (gestureTracker.isErasing) {
+                                    val endPos = Offset(event.getX(actionIndex), event.getY(actionIndex))
+                                    activeStrokes = activeStrokes.filterNot {
+                                        strokeIntersects(it, endPos, eraserWidth / 2f)
+                                    }
+                                    commitStrokes(activeStrokes)
+                                } else {
+                                    processWritingSample(
+                                        x = event.getX(actionIndex),
+                                        y = event.getY(actionIndex),
+                                        rawPressure = event.getPressure(actionIndex),
+                                        timestamp = event.eventTime
+                                    )
+                                    val finalPoints = gestureTracker.currentPoints.toList()
+                                    if (finalPoints.isNotEmpty()) {
+                                        val cachedPath = buildVariableWidthStrokePath(finalPoints)
+                                        val finalizedStroke = StrokeState(finalPoints, isEraser = false)
+                                            .withCachedPath(cachedPath)
+                                        commitStrokes(activeStrokes + finalizedStroke)
                                     }
                                 }
 
-                                drag.consume()
+                                gestureTracker.reset()
+                                currentStrokeState = null
+                                disallowIntercept(false)
+                                true
                             }
-                        } while (dragEvent.changes.any { it.pressed })
 
-                        if (!isActuallyErasing) {
-                            currentStrokeState?.let {
-                                commitStrokes(activeStrokes + it)
+                            MotionEvent.ACTION_CANCEL -> {
+                                gestureTracker.reset()
+                                currentStrokeState = null
+                                disallowIntercept(false)
+                                false
                             }
-                        } else {
-                            commitStrokes(activeStrokes)
+
+                            else -> gestureTracker.isActive
                         }
-                        currentStrokeState = null
                     }
+            ) {
+                // Dibuja el historial de trazos usando el Path precalculado y cacheado
+                strokes.forEach { stroke ->
+                    drawCachedStroke(stroke)
                 }
-        ) {
-            // Dibuja el historial de trazos
-            strokes.forEach { stroke ->
-                drawVariableStroke(stroke)
-            }
 
-            // Dibuja el trazo actual en tiempo real
-            currentStrokeState?.let { stroke ->
-                drawVariableStroke(stroke)
+                // Dibuja el trazo actual en vivo sin recalcular Chaikin en cada frame
+                currentStrokeState?.let { stroke ->
+                    drawLiveStroke(stroke)
+                }
             }
-        }
         } // Cierre del Box con Scroll
 
         // Botón para procesar el texto con ML Kit
@@ -386,20 +474,29 @@ fun DrawingScreen(viewModel: TaskViewModel, onFinished: () -> Unit = {}) {
 } // Cierra el Box
 } // Cierra la función DrawingScreen
 
-// Función para renderizar un trazo considerando la presión y uniones suavizadas
-private fun DrawScope.drawVariableStroke(stroke: StrokeState) {
-    val color = if (stroke.isEraser) Color.Transparent else Color.Black
-    val blendMode = if (stroke.isEraser) BlendMode.Clear else BlendMode.SrcOver
+// Renderiza un trazo completado usando su Path cerrado precalculado y cacheado
+private fun DrawScope.drawCachedStroke(stroke: StrokeState) {
+    if (stroke.isEraser || stroke.points.isEmpty()) return
+    val path = stroke.cachedPath ?: buildVariableWidthStrokePath(stroke.points).also {
+        stroke.cachedPath = it
+    }
+    drawPath(
+        path = path,
+        color = Color.Black,
+        style = Fill
+    )
+}
 
-    if (stroke.points.isEmpty()) return
+// Renderizado ligero en vivo durante ACTION_MOVE (sin subdivisión Chaikin por frame)
+private fun DrawScope.drawLiveStroke(stroke: StrokeState) {
+    if (stroke.isEraser || stroke.points.isEmpty()) return
 
     if (stroke.points.size == 1) {
         val p = stroke.points.first()
         drawCircle(
-            color = color,
+            color = Color.Black,
             radius = p.width / 2f,
-            center = p.position,
-            blendMode = blendMode
+            center = p.position
         )
     } else {
         for (i in 0 until stroke.points.size - 1) {
@@ -407,44 +504,22 @@ private fun DrawScope.drawVariableStroke(stroke: StrokeState) {
             val p2 = stroke.points[i + 1]
             val avgWidth = (p1.width + p2.width) / 2f
 
-            drawCircle(
-                color = color,
-                radius = p1.width / 2f,
-                center = p1.position,
-                blendMode = blendMode
-            )
-
             drawLine(
-                color = color,
+                color = Color.Black,
                 start = p1.position,
                 end = p2.position,
                 strokeWidth = avgWidth,
-                cap = StrokeCap.Round,
-                blendMode = blendMode
+                cap = StrokeCap.Round
             )
         }
-
-        val lastPoint = stroke.points.last()
-        drawCircle(
-            color = color,
-            radius = lastPoint.width / 2f,
-            center = lastPoint.position,
-            blendMode = blendMode
-        )
     }
 }
 
-// Función auxiliar para detectar el botón lateral del Stylus / S-Pen a nivel de Android y Compose
-private fun isStylusButtonPressed(event: PointerEvent, pointerType: PointerType): Boolean {
-    if (pointerType == PointerType.Eraser) return true
-
-    val motionEvent = event.motionEvent
-    if (motionEvent != null) {
-        val buttonState = motionEvent.buttonState
-        val isPrimaryStylus = (buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0
-        val isSecondaryStylus = (buttonState and MotionEvent.BUTTON_STYLUS_SECONDARY) != 0
-        if (isPrimaryStylus || isSecondaryStylus) return true
-    }
-
-    return event.buttons.isSecondaryPressed || event.buttons.isTertiaryPressed
+// Detecta el botón lateral del Stylus / S-Pen o botones secundarios a partir de MotionEvent
+private fun isMotionEventStylusButtonPressed(event: MotionEvent): Boolean {
+    val mask = MotionEvent.BUTTON_STYLUS_PRIMARY or
+        MotionEvent.BUTTON_STYLUS_SECONDARY or
+        MotionEvent.BUTTON_SECONDARY or
+        MotionEvent.BUTTON_TERTIARY
+    return (event.buttonState and mask) != 0
 }
